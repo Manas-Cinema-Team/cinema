@@ -1,6 +1,6 @@
-# frontend
+# Cinema
 
-This template should help get you started developing with Vue 3 in Vite.
+Frontend application for the Cinema project, built with Vue 3 and Vite.
 
 ## Recommended IDE Setup
 

@@ -30,7 +30,7 @@ lerna-debug.log*
 !.env.*.example
 *.local
 
-# Python / Django
+# Python
 __pycache__/
 *.py[cod]
 *.pyo
@@ -56,19 +56,14 @@ pip-wheel-metadata/
 venv/
 env/
 ENV/
-backend/.venv/
-backend/venv/
-backend/env/
-backend/ENV/
-backend/db.sqlite3
-backend/db.sqlite3-journal
-backend/media/
-backend/static/
-backend/staticfiles/
+db.sqlite3
+db.sqlite3-journal
+media/
+static/
+staticfiles/
 
 # Frontend / Vue / Vite
 node_modules/
-frontend/node_modules/
 dist/
 dist-ssr/
 coverage/
@@ -77,6 +72,6 @@ coverage/
 vite.config.ts.timestamp-*.mjs
 
 # Frontend test artifacts
-frontend/cypress/videos/
-frontend/cypress/screenshots/
-frontend/__screenshots__/
+cypress/videos/
+cypress/screenshots/
+__screenshots__/
