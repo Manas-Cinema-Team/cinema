@@ -1,358 +1,352 @@
 <script setup lang="ts">
-import { computed, reactive } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import AppIcon from '@/components/AppIcon.vue'
-import { findMovieById, type SeatCategory } from '@/data/cinema'
-
-type SeatStatus = 'available' | 'taken' | 'selected'
-interface Seat {
-  row: string
-  col: number
-  status: SeatStatus
-  category: SeatCategory
-}
-
-const ROWS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']
-const COLS = Array.from({ length: 14 }, (_, i) => i + 1)
-const CATEGORY_MAP: Record<string, SeatCategory> = {
-  A: 'standard', B: 'standard', C: 'standard',
-  D: 'premium', E: 'premium', F: 'premium', G: 'premium', H: 'premium',
-  I: 'vip', J: 'vip', K: 'vip',
-}
-const MAX_SEATS = 8
+import {
+  findHall,
+  findMovie,
+  findSession,
+  formatDateLabel,
+  formatTime,
+  type SeatKind,
+} from '@/data/cinema'
 
 const route = useRoute()
 const router = useRouter()
 
-const movie = computed(() => findMovieById(route.params.id ?? ''))
-const showtime = computed(() => {
-  const id = route.params.sessionId as string
-  return movie.value?.showtimes.find((s) => s.id === id) ?? movie.value?.showtimes[0]
-})
-
-// Deterministic taken seats, no movie-asset dependency
-const isTaken = (row: string, col: number) => {
-  const rowIdx = ROWS.indexOf(row)
-  const seed = (rowIdx * 31 + col * 17) % 100
-  const mid = col >= 4 && col <= 11
-  if (seed < 30 && mid) return true
-  if (seed < 15) return true
-  return false
-}
-
-const seatKey = (row: string, col: number) => `${row}${col}`
-
-const state = reactive({
-  selected: new Set<string>(),
-})
-
-const grid = computed<Seat[][]>(() =>
-  ROWS.map((row) =>
-    COLS.map((col) => ({
-      row,
-      col,
-      category: CATEGORY_MAP[row] ?? 'standard',
-      status: isTaken(row, col)
-        ? 'taken'
-        : state.selected.has(seatKey(row, col))
-          ? 'selected'
-          : 'available',
-    })),
-  ),
+const sessionId = computed(() =>
+  Array.isArray(route.params.sessionId)
+    ? route.params.sessionId[0]
+    : route.params.sessionId,
 )
+const session = computed(() => findSession(sessionId.value))
+const movie = computed(() => (session.value ? findMovie(session.value.movieId) : undefined))
+const hall = computed(() => (session.value ? findHall(session.value.hallId) : undefined))
 
-const toggleSeat = (seat: Seat) => {
-  if (seat.status === 'taken') return
-  const key = seatKey(seat.row, seat.col)
-  if (state.selected.has(key)) {
-    state.selected.delete(key)
-    return
-  }
-  if (state.selected.size >= MAX_SEATS) return
-  state.selected.add(key)
+// ── Моковое серверное состояние мест ──
+// ТЗ: polling 5-10 сек синхронизирует available / held / booked.
+const seedTaken = (row: string, col: number, rowIdx: number): 'booked' | 'held' | null => {
+  const seed = (rowIdx * 31 + col * 17 + (sessionId.value ?? '').length * 11) % 100
+  if (seed < 10) return 'booked'
+  if (seed < 16) return 'held'
+  return null
 }
 
-const priceFor = (cat: SeatCategory): number => {
-  const s = showtime.value
-  if (!s) return 0
-  if (cat === 'vip') return s.priceVip
-  if (cat === 'premium') return s.pricePremium
-  return s.priceStandard
-}
+const remoteStatus = reactive<Record<string, 'booked' | 'held'>>({})
+const selected = ref<Set<string>>(new Set())
 
-const selectedList = computed<Seat[]>(() =>
-  [...state.selected].map((k): Seat => {
-    const row = k.charAt(0)
-    const col = Number(k.slice(1))
-    return {
-      row,
-      col,
-      category: CATEGORY_MAP[row] ?? 'standard',
-      status: 'selected',
+const buildRemote = () => {
+  if (!hall.value) return
+  const schema = hall.value.schema
+  schema.rows.forEach((row, rowIdx) => {
+    for (let col = 1; col <= schema.seatsPerRow; col++) {
+      const key = `${row}${col}`
+      const status = seedTaken(row, col, rowIdx)
+      if (status) remoteStatus[key] = status
     }
-  }).sort((a, b) => (a.row + a.col).localeCompare(b.row + String(b.col))),
-)
-
-const ticketTotal = computed(() =>
-  selectedList.value.reduce((sum, s) => sum + priceFor(s.category), 0),
-)
-const serviceFee = computed(() => selectedList.value.length * 30)
-const grandTotal = computed(() => ticketTotal.value + serviceFee.value)
-
-const categoryLabel: Record<SeatCategory, string> = {
-  standard: 'Стандарт',
-  premium: 'Премиум',
-  vip: 'VIP',
+  })
 }
 
-const categoryAccent: Record<SeatCategory, { fill: string; border: string; glow: string }> = {
-  standard: { fill: '#166534', border: '#22c55e', glow: 'rgba(34,197,94,0.45)' },
-  premium: { fill: '#6b21a8', border: '#a855f7', glow: 'rgba(168,85,247,0.45)' },
-  vip: { fill: '#854d0e', border: '#f59e0b', glow: 'rgba(245,158,11,0.5)' },
+// ТЗ 6.6: «HTTP-поллинг 5-10 сек». Симуляция — случайное "бронирование" со стороны других.
+let pollTimer: ReturnType<typeof setInterval> | null = null
+
+const pollTick = () => {
+  if (!hall.value) return
+  const schema = hall.value.schema
+  // один случайный свободный слот становится "held" или "booked"
+  const free: string[] = []
+  schema.seats.forEach((s) => {
+    if (s.disabled) return
+    const key = `${s.row}${s.number}`
+    if (!remoteStatus[key] && !selected.value.has(key)) free.push(key)
+  })
+  if (free.length === 0) return
+  const pick = free[Math.floor(Math.random() * free.length)]
+  if (!pick) return
+  remoteStatus[pick] = Math.random() < 0.5 ? 'held' : 'booked'
 }
+
+// ── 10-минутный таймер брони (ТЗ 6.5) ──
+const HOLD_SECONDS = 10 * 60
+const secondsLeft = ref(HOLD_SECONDS)
+let holdTimer: ReturnType<typeof setInterval> | null = null
+
+const timerLabel = computed(() => {
+  const m = Math.floor(secondsLeft.value / 60)
+  const s = secondsLeft.value % 60
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+})
+
+onMounted(() => {
+  buildRemote()
+  holdTimer = setInterval(() => {
+    if (secondsLeft.value > 0) secondsLeft.value -= 1
+    else if (holdTimer) {
+      clearInterval(holdTimer)
+      selected.value.clear()
+    }
+  }, 1000)
+  pollTimer = setInterval(pollTick, 7000)
+})
+
+onUnmounted(() => {
+  if (holdTimer) clearInterval(holdTimer)
+  if (pollTimer) clearInterval(pollTimer)
+})
+
+// ── Взаимодействие ──
+const MAX_SEATS = 8
+
+type DisplayStatus = 'available' | 'held' | 'booked' | 'selected' | 'disabled'
+
+const seatStatus = (row: string, col: number): DisplayStatus => {
+  const key = `${row}${col}`
+  const seat = hall.value?.schema.seats.find((s) => s.row === row && s.number === col)
+  if (seat?.disabled) return 'disabled'
+  if (selected.value.has(key)) return 'selected'
+  return remoteStatus[key] ?? 'available'
+}
+
+const toggle = (row: string, col: number) => {
+  const key = `${row}${col}`
+  const status = seatStatus(row, col)
+  if (status === 'held' || status === 'booked' || status === 'disabled') return
+  const next = new Set(selected.value)
+  if (next.has(key)) next.delete(key)
+  else {
+    if (next.size >= MAX_SEATS) return
+    next.add(key)
+  }
+  selected.value = next
+}
+
+const kindOf = (row: string, col: number): SeatKind => {
+  const seat = hall.value?.schema.seats.find((s) => s.row === row && s.number === col)
+  return seat?.kind ?? 'standard'
+}
+
+const priceFor = (kind: SeatKind) =>
+  kind === 'vip' ? session.value?.priceVip ?? 0 : session.value?.priceStandard ?? 0
+
+const selectedList = computed(() =>
+  [...selected.value]
+    .map((k) => {
+      const row = k.charAt(0)
+      const col = Number(k.slice(1))
+      return { row, col, kind: kindOf(row, col), key: k }
+    })
+    .sort((a, b) => a.key.localeCompare(b.key)),
+)
+
+const total = computed(() =>
+  selectedList.value.reduce((sum, s) => sum + priceFor(s.kind), 0),
+)
 
 const confirm = () => {
-  if (selectedList.value.length === 0) return
+  if (selectedList.value.length === 0 || !session.value) return
   router.push({
     name: 'booking-success',
     query: {
-      movie: movie.value?.id,
-      session: showtime.value?.id,
-      seats: [...state.selected].join(','),
-      total: String(grandTotal.value),
+      session: session.value.id,
+      seats: [...selected.value].join(','),
+      total: String(total.value),
     },
   })
 }
 </script>
 
 <template>
-  <div v-if="!movie || !showtime" class="max-w-7xl mx-auto px-4 py-32 text-center">
-    <p class="eyebrow mb-2">Ошибка</p>
-    <h1 class="display" style="color: #fff; font-size: 2rem">Сеанс не найден</h1>
-    <button class="btn-amber mt-6" @click="router.push('/')">На главную</button>
+  <div v-if="!session || !movie || !hall" class="stage flex items-center justify-center" style="min-height: 100vh">
+    <div class="text-center" style="color: #71717a">
+      Сеанс не найден.
+      <button class="btn-amber mt-6" @click="router.push('/schedule')">К расписанию</button>
+    </div>
   </div>
 
-  <div v-else class="stage" style="min-height: 100vh; padding-top: 96px">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <!-- Breadcrumb / context row -->
-      <div class="flex items-center gap-4 mb-10 flex-wrap">
-        <button
-          class="flex items-center gap-2 px-4 py-2.5 rounded-xl transition-colors"
-          style="
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.09);
-            color: #d4d4d8;
-          "
-          @click="router.back()"
-        >
-          <AppIcon name="chevron-left" :size="18" />
-          <span style="font-size: 0.875rem; font-weight: 500">Назад</span>
-        </button>
+  <section v-else class="stage" style="min-height: 100vh; padding-top: 96px">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <!-- Header row -->
+      <div class="flex flex-wrap items-center justify-between gap-4 mb-8">
+        <div>
+          <button
+            class="flex items-center gap-2 mb-3"
+            style="color: #a1a1aa; font-size: 0.85rem"
+            @click="router.back()"
+          >
+            <AppIcon name="chevron-left" :size="16" />
+            Назад
+          </button>
+          <h1 class="display" style="color: #fff; font-size: clamp(1.5rem, 3vw, 2rem)">
+            {{ movie.title }}
+          </h1>
+          <div class="flex flex-wrap gap-3 mt-1" style="color: #a1a1aa; font-size: 0.85rem">
+            <span class="flex items-center gap-1">
+              <AppIcon name="calendar" :size="12" />
+              {{ formatDateLabel(session.startDateTime.slice(0, 10)) }}
+            </span>
+            <span class="flex items-center gap-1">
+              <AppIcon name="clock" :size="12" />
+              {{ formatTime(session.startDateTime) }}
+            </span>
+            <span>{{ hall.name }}</span>
+          </div>
+        </div>
 
-        <div
-          class="hidden sm:flex items-center gap-3 px-4 py-2.5 rounded-xl"
-          style="
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid rgba(255, 255, 255, 0.07);
-          "
-        >
-          <div class="poster-frame" style="width: 36px; height: 48px">
-            <img :src="movie.poster" :alt="movie.title" />
-          </div>
-          <div>
-            <div style="color: #fff; font-size: 0.875rem; font-weight: 600">
-              {{ movie.title }}
-            </div>
-            <div
-              class="flex items-center gap-3 mt-0.5"
-              style="color: #71717a; font-size: 0.75rem"
-            >
-              <span class="flex items-center gap-1">
-                <AppIcon name="calendar" :size="11" /> {{ showtime.dateLabel }}
-              </span>
-              <span class="flex items-center gap-1">
-                <AppIcon name="clock" :size="11" /> {{ showtime.time }}
-              </span>
-              <span class="chip-muted">{{ showtime.format }}</span>
-              <span class="chip-muted">{{ showtime.hall }}</span>
-            </div>
-          </div>
+        <div class="hold-timer" :class="{ 'hold-timer--low': secondsLeft < 60 }">
+          <AppIcon name="clock" :size="14" />
+          <span>Бронь истекает через {{ timerLabel }}</span>
         </div>
       </div>
 
       <div class="grid grid-cols-1 xl:grid-cols-4 gap-8">
-        <!-- ── Seat map ── -->
         <div class="xl:col-span-3">
-          <div class="text-center mb-10">
-            <div class="relative inline-block w-full max-w-xl mx-auto">
-              <div class="screen-bar mx-auto" />
-              <p
-                class="mt-3"
-                style="
-                  color: #52525b;
-                  font-size: 0.72rem;
-                  letter-spacing: 0.2em;
-                  text-transform: uppercase;
-                  font-weight: 500;
-                "
-              >
-                ЭКРАН
-              </p>
-            </div>
+          <!-- Screen -->
+          <div class="text-center mb-8">
+            <div class="screen-bar mx-auto" style="max-width: 560px" />
+            <p
+              class="mt-2"
+              style="color: #52525b; font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase"
+            >
+              Экран
+            </p>
           </div>
 
+          <!-- Seat map -->
           <div class="seat-map">
             <div
-              v-for="(row, rIdx) in grid"
-              :key="ROWS[rIdx]"
+              v-for="(row, rIdx) in hall.schema.rows"
+              :key="row"
               class="seat-row"
             >
-              <span class="seat-rowlabel">{{ ROWS[rIdx] }}</span>
+              <span class="seat-rowlabel">{{ row }}</span>
               <div class="seat-cells">
-                <template v-for="(seat, cIdx) in row" :key="`${seat.row}-${seat.col}`">
-                  <!-- aisle -->
-                  <span v-if="cIdx === 7" class="seat-aisle" />
+                <template v-for="col in hall.schema.seatsPerRow" :key="`${row}-${col}`">
+                  <span
+                    v-if="col === Math.ceil(hall.schema.seatsPerRow / 2) + 1"
+                    class="seat-aisle"
+                  />
                   <button
                     type="button"
                     class="seat"
                     :class="[
-                      `seat--${seat.status}`,
-                      `seat--${seat.category}`,
+                      `seat--${seatStatus(row, col)}`,
+                      `seat--${kindOf(row, col)}`,
                     ]"
-                    :disabled="seat.status === 'taken'"
-                    :aria-label="`Место ${seat.row}${seat.col}, ${categoryLabel[seat.category]}`"
-                    @click="toggleSeat(seat)"
+                    :disabled="['held', 'booked', 'disabled'].includes(seatStatus(row, col))"
+                    :aria-label="`Место ${row}${col}`"
+                    @click="toggle(row, col)"
+                    v-show="rIdx >= 0"
                   >
-                    {{ seat.col }}
+                    {{ col }}
                   </button>
                 </template>
               </div>
-              <span class="seat-rowlabel">{{ ROWS[rIdx] }}</span>
+              <span class="seat-rowlabel">{{ row }}</span>
             </div>
           </div>
 
           <!-- Legend -->
-          <div
-            class="mt-10 flex flex-wrap items-center justify-center gap-6 p-5 rounded-2xl"
-            style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.06)"
-          >
-            <div
-              v-for="item in [
-                { label: 'Свободно', cls: 'seat--available seat--standard' },
-                { label: 'Выбрано', cls: 'seat--selected seat--standard' },
-                { label: 'Занято', cls: 'seat--taken seat--standard' },
-                { label: 'Премиум', cls: 'seat--available seat--premium' },
-                { label: 'VIP', cls: 'seat--available seat--vip' },
-              ]"
-              :key="item.label"
-              class="flex items-center gap-2"
-            >
-              <span class="seat seat-demo" :class="item.cls" />
-              <span style="color: #a1a1aa; font-size: 0.8rem">{{ item.label }}</span>
+          <div class="legend">
+            <div class="legend-item">
+              <span class="seat seat-demo seat--available seat--standard" />
+              <span>Свободно</span>
+            </div>
+            <div class="legend-item">
+              <span class="seat seat-demo seat--available seat--vip" />
+              <span>VIP</span>
+            </div>
+            <div class="legend-item">
+              <span class="seat seat-demo seat--selected seat--standard" />
+              <span>Выбрано</span>
+            </div>
+            <div class="legend-item">
+              <span class="seat seat-demo seat--held seat--standard" />
+              <span>Забронировано</span>
+            </div>
+            <div class="legend-item">
+              <span class="seat seat-demo seat--booked seat--standard" />
+              <span>Куплено</span>
             </div>
           </div>
         </div>
 
-        <!-- ── Summary ── -->
-        <aside
-          class="rounded-2xl p-6 h-fit"
-          style="
-            background: #14141c;
-            border: 1px solid rgba(255, 255, 255, 0.06);
-            position: sticky;
-            top: 96px;
-          "
-        >
-          <p class="eyebrow mb-1">Ваш заказ</p>
-          <h2 class="display mb-5" style="color: #fff; font-size: 1.5rem">
+        <!-- Summary -->
+        <aside class="summary">
+          <p class="eyebrow mb-1">Заказ</p>
+          <h2 class="display mb-4" style="color: #fff; font-size: 1.3rem">
             {{ selectedList.length }} {{ selectedList.length === 1 ? 'место' : 'места' }}
           </h2>
 
-          <div v-if="selectedList.length > 0" class="flex flex-wrap gap-2 mb-6">
+          <div v-if="selectedList.length > 0" class="flex flex-wrap gap-2 mb-5">
             <span
               v-for="s in selectedList"
-              :key="`${s.row}${s.col}`"
-              class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md"
-              :style="{
-                background: `${categoryAccent[s.category].glow}`,
-                border: `1px solid ${categoryAccent[s.category].border}`,
-                color: '#fff',
-                fontSize: '0.78rem',
-                fontWeight: 600,
-              }"
+              :key="s.key"
+              class="seat-chip"
+              :class="`seat-chip--${s.kind}`"
             >
               {{ s.row }}{{ s.col }}
-              <button
-                class="opacity-70 hover:opacity-100"
-                aria-label="Убрать место"
-                @click="toggleSeat({ ...s, status: 'selected' })"
-              >
-                <AppIcon name="close" :size="12" />
+              <button aria-label="Убрать" @click="toggle(s.row, s.col)">
+                <AppIcon name="close" :size="11" />
               </button>
             </span>
           </div>
-          <div
-            v-else
-            class="p-4 rounded-xl mb-6 text-center"
-            style="
-              background: rgba(255, 255, 255, 0.03);
-              border: 1px dashed rgba(255, 255, 255, 0.1);
-              color: #71717a;
-              font-size: 0.85rem;
-            "
-          >
-            Выберите места на схеме зала
+          <div v-else class="summary-empty">
+            Выберите места на схеме
           </div>
 
-          <dl class="space-y-3 mb-6">
-            <div class="flex justify-between" style="color: #a1a1aa; font-size: 0.875rem">
-              <dt>Билеты</dt>
-              <dd>{{ ticketTotal }} сом</dd>
-            </div>
-            <div class="flex justify-between" style="color: #a1a1aa; font-size: 0.875rem">
-              <dt>Сбор</dt>
-              <dd>{{ serviceFee }} сом</dd>
-            </div>
-            <div class="divider" />
-            <div
-              class="flex justify-between items-baseline"
-              style="font-weight: 700"
-            >
-              <dt style="color: #e4e4e7; font-size: 0.95rem">Итого</dt>
-              <dd class="display" style="color: #f59e0b; font-size: 1.6rem">
-                {{ grandTotal }} сом
-              </dd>
-            </div>
-          </dl>
+          <div class="divider" style="margin: 1rem 0" />
+
+          <div class="flex justify-between mb-5" style="font-weight: 700">
+            <span style="color: #e4e4e7">Итого</span>
+            <span class="display" style="color: #f59e0b; font-size: 1.4rem">
+              {{ total }} сом
+            </span>
+          </div>
 
           <button
             class="btn-amber w-full"
             :disabled="selectedList.length === 0"
             @click="confirm"
           >
-            <AppIcon name="ticket" :size="18" />
-            Подтвердить бронь
+            <AppIcon name="ticket" :size="16" />
+            Подтвердить
           </button>
-          <p
-            class="mt-3 text-center"
-            style="color: #52525b; font-size: 0.72rem; letter-spacing: 0.05em"
-          >
-            Максимум {{ MAX_SEATS }} мест за бронирование
+          <p class="mt-2 text-center" style="color: #52525b; font-size: 0.72rem">
+            Максимум {{ MAX_SEATS }} мест
           </p>
         </aside>
       </div>
     </div>
-  </div>
+  </section>
 </template>
 
 <style scoped>
+.hold-timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: 0.6rem;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  color: #f59e0b;
+  font-size: 0.82rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.hold-timer--low {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #ef4444;
+}
+
 .seat-map {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 24px 8px;
-  border-radius: 1rem;
+  padding: 20px 8px;
+  border-radius: 0.75rem;
   background: rgba(255, 255, 255, 0.015);
   border: 1px solid rgba(255, 255, 255, 0.04);
   overflow-x: auto;
@@ -360,9 +354,9 @@ const confirm = () => {
 .seat-row {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   justify-content: center;
-  min-width: 560px;
+  min-width: 480px;
 }
 .seat-rowlabel {
   width: 18px;
@@ -383,71 +377,64 @@ const confirm = () => {
 .seat {
   width: 28px;
   height: 28px;
-  border-radius: 6px 6px 8px 8px;
+  border-radius: 5px 5px 8px 8px;
   font-size: 0.6rem;
   font-weight: 600;
   color: transparent;
   border: 1px solid transparent;
   background: #16161e;
   cursor: pointer;
-  transition: transform 120ms ease, background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+  transition: all 120ms ease;
 }
 .seat:hover:not(:disabled) {
   transform: translateY(-1px);
   color: rgba(255, 255, 255, 0.6);
 }
-.seat:disabled {
-  cursor: not-allowed;
-}
+.seat:disabled { cursor: not-allowed; }
 
-/* Status */
-.seat--taken {
-  background: #1c1c22 !important;
-  border-color: transparent !important;
-  opacity: 0.4;
-}
 .seat--available.seat--standard {
-  background: #16161e;
+  background: #1a1a24;
   border-color: rgba(255, 255, 255, 0.1);
 }
 .seat--available.seat--standard:hover {
-  background: #20202e;
-  border-color: rgba(34, 197, 94, 0.4);
-}
-.seat--available.seat--premium {
-  background: #150b1c;
-  border-color: rgba(168, 85, 247, 0.25);
-}
-.seat--available.seat--premium:hover {
-  background: #1e1028;
-  border-color: rgba(168, 85, 247, 0.5);
+  border-color: rgba(34, 197, 94, 0.5);
 }
 .seat--available.seat--vip {
-  background: #1c1409;
+  background: #1f1709;
   border-color: rgba(245, 158, 11, 0.3);
 }
 .seat--available.seat--vip:hover {
-  background: #291f0e;
   border-color: rgba(245, 158, 11, 0.6);
 }
 
 .seat--selected.seat--standard {
   background: #166534;
   border-color: #22c55e;
-  box-shadow: 0 0 12px rgba(34, 197, 94, 0.4);
   color: #fff;
-}
-.seat--selected.seat--premium {
-  background: #6b21a8;
-  border-color: #a855f7;
-  box-shadow: 0 0 12px rgba(168, 85, 247, 0.4);
-  color: #fff;
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.4);
 }
 .seat--selected.seat--vip {
   background: #854d0e;
   border-color: #f59e0b;
-  box-shadow: 0 0 12px rgba(245, 158, 11, 0.5);
   color: #fff;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
+}
+
+.seat--held {
+  background: #3f2a0a !important;
+  border-color: rgba(245, 158, 11, 0.2) !important;
+  opacity: 0.7;
+}
+.seat--booked {
+  background: #1c1c22 !important;
+  border-color: transparent !important;
+  opacity: 0.35;
+}
+.seat--disabled {
+  background: transparent !important;
+  border-color: transparent !important;
+  cursor: default;
+  opacity: 0.2;
 }
 
 .seat-demo {
@@ -456,9 +443,70 @@ const confirm = () => {
   cursor: default;
 }
 
-.btn-amber:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  box-shadow: none;
+.legend {
+  margin-top: 1.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  justify-content: center;
+  padding: 1rem;
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #a1a1aa;
+  font-size: 0.78rem;
+}
+
+.summary {
+  background: #14141c;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  height: fit-content;
+  position: sticky;
+  top: 96px;
+}
+
+.summary-empty {
+  padding: 0.9rem;
+  border-radius: 0.6rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  color: #71717a;
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+.seat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.55rem;
+  border-radius: 0.35rem;
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.seat-chip button {
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.7;
+  padding: 0;
+}
+.seat-chip button:hover { opacity: 1; }
+.seat-chip--standard {
+  background: rgba(34, 197, 94, 0.2);
+  border: 1px solid rgba(34, 197, 94, 0.4);
+}
+.seat-chip--vip {
+  background: rgba(245, 158, 11, 0.2);
+  border: 1px solid rgba(245, 158, 11, 0.4);
 }
 </style>

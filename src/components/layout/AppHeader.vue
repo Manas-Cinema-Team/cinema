@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, watch } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import AppIcon from '@/components/AppIcon.vue'
+import { currentUser, isAuthenticated, logout } from '@/stores/auth'
 
 const scrolled = ref(false)
 const menuOpen = ref(false)
 const route = useRoute()
+const router = useRouter()
 
 const onScroll = () => {
   scrolled.value = window.scrollY > 20
@@ -26,93 +28,75 @@ watch(
 )
 
 const navLinks = [
-  { label: 'Фильмы', to: '/' },
-  { label: 'Сейчас', to: '/?filter=now' },
-  { label: 'Скоро', to: '/?filter=soon' },
+  { label: 'Главная', to: '/' },
+  { label: 'Афиша', to: '/movies' },
+  { label: 'Расписание', to: '/schedule' },
 ]
+
+const onLogout = () => {
+  logout()
+  router.push('/')
+}
 </script>
 
 <template>
   <header
     class="fixed top-0 left-0 right-0 z-50"
     :style="{
-      background: scrolled
-        ? 'rgba(8,8,14,0.92)'
-        : 'linear-gradient(to bottom, rgba(8,8,14,0.85) 0%, transparent 100%)',
-      backdropFilter: scrolled ? 'blur(20px)' : 'none',
+      background: scrolled ? 'rgba(8,8,14,0.92)' : 'rgba(8,8,14,0.55)',
+      backdropFilter: 'blur(16px)',
       borderBottom: scrolled ? '1px solid rgba(255,255,255,0.06)' : '1px solid transparent',
-      transition: 'background 400ms ease, border-color 400ms ease, backdrop-filter 400ms ease',
+      transition: 'background 300ms ease, border-color 300ms ease',
     }"
   >
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex items-center justify-between h-20">
-        <RouterLink to="/" class="flex items-center gap-3 group">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <RouterLink to="/" class="flex items-center gap-2">
           <div
-            class="w-10 h-10 rounded-xl flex items-center justify-center transition-transform duration-300 group-hover:scale-105"
+            class="w-9 h-9 rounded-lg flex items-center justify-center"
             style="background: linear-gradient(135deg, #f59e0b, #d97706)"
           >
-            <AppIcon name="film" :size="20" fill="#fff" />
+            <AppIcon name="film" :size="18" fill="#fff" />
           </div>
-          <span class="display text-2xl" style="letter-spacing: 0.12em">
-            <span style="color: #f59e0b">CINE</span><span style="color: #f5f5f5">MAX</span>
+          <span class="display" style="font-size: 1.2rem; letter-spacing: 0.14em">
+            <span style="color: #f59e0b">CINE</span><span style="color: #f5f5f5">MA</span>
           </span>
         </RouterLink>
 
-        <nav class="hidden md:flex items-center gap-8">
+        <nav class="hidden md:flex items-center gap-7">
           <RouterLink
             v-for="link in navLinks"
             :key="link.label"
             :to="link.to"
-            class="transition-colors duration-200"
-            style="
-              font-size: 0.875rem;
-              letter-spacing: 0.05em;
-              text-transform: uppercase;
-              font-weight: 500;
-              color: #d4d4d8;
-            "
-            active-class="!text-amber-400"
+            class="nav-link"
+            active-class="nav-link--active"
           >
             {{ link.label }}
           </RouterLink>
         </nav>
 
         <div class="hidden md:flex items-center gap-3">
-          <RouterLink
-            to="/login"
-            class="flex items-center gap-2 px-5 py-2.5 rounded-xl transition-all duration-200"
-            style="
-              border: 1px solid rgba(255, 255, 255, 0.12);
-              color: #d4d4d8;
-              font-size: 0.875rem;
-              font-weight: 500;
-            "
-          >
-            <AppIcon name="user" :size="16" />
-            Вход
-          </RouterLink>
-          <RouterLink
-            to="/register"
-            class="flex items-center gap-2 px-5 py-2.5 rounded-xl transition-all duration-200"
-            style="
-              background: linear-gradient(135deg, #f59e0b, #d97706);
-              color: #18181b;
-              font-size: 0.875rem;
-              font-weight: 600;
-            "
-          >
-            <AppIcon name="ticket" :size="16" />
-            Регистрация
-          </RouterLink>
+          <template v-if="isAuthenticated">
+            <span style="color: #a1a1aa; font-size: 0.85rem">
+              {{ currentUser?.email }}
+            </span>
+            <button class="btn-compact-ghost" @click="onLogout">
+              Выйти
+            </button>
+          </template>
+          <template v-else>
+            <RouterLink to="/login" class="btn-compact-ghost">Вход</RouterLink>
+            <RouterLink to="/register" class="btn-compact-amber">Регистрация</RouterLink>
+          </template>
         </div>
 
         <button
-          class="md:hidden p-2 transition-colors"
+          class="md:hidden p-2"
           style="color: #d4d4d8"
           :aria-label="menuOpen ? 'Закрыть меню' : 'Открыть меню'"
           @click="menuOpen = !menuOpen"
         >
-          <AppIcon :name="menuOpen ? 'close' : 'menu'" :size="24" />
+          <AppIcon :name="menuOpen ? 'close' : 'menu'" :size="22" />
         </button>
       </div>
     </div>
@@ -120,45 +104,66 @@ const navLinks = [
     <div
       v-if="menuOpen"
       class="md:hidden"
-      style="
-        background: rgba(8, 8, 14, 0.97);
-        border-top: 1px solid rgba(255, 255, 255, 0.08);
-      "
+      style="background: rgba(8, 8, 14, 0.97); border-top: 1px solid rgba(255, 255, 255, 0.08)"
     >
-      <div class="px-4 py-6 flex flex-col gap-4">
+      <div class="px-4 py-5 flex flex-col gap-3">
         <RouterLink
           v-for="link in navLinks"
           :key="link.label"
           :to="link.to"
-          class="py-2 transition-colors"
-          style="font-size: 1rem; font-weight: 500; color: #d4d4d8"
+          class="nav-link py-2"
+          active-class="nav-link--active"
         >
           {{ link.label }}
         </RouterLink>
-        <div
-          class="flex flex-col gap-3 pt-4"
-          style="border-top: 1px solid rgba(255, 255, 255, 0.08)"
-        >
-          <RouterLink
-            to="/login"
-            class="w-full text-center py-3 rounded-xl"
-            style="border: 1px solid rgba(255, 255, 255, 0.12); color: #d4d4d8; font-weight: 500"
-          >
-            Вход
-          </RouterLink>
-          <RouterLink
-            to="/register"
-            class="w-full text-center py-3 rounded-xl"
-            style="
-              background: linear-gradient(135deg, #f59e0b, #d97706);
-              color: #18181b;
-              font-weight: 600;
-            "
-          >
-            Регистрация
-          </RouterLink>
+        <div class="pt-3 flex flex-col gap-2" style="border-top: 1px solid rgba(255,255,255,0.06)">
+          <template v-if="isAuthenticated">
+            <span style="color: #a1a1aa; font-size: 0.85rem">{{ currentUser?.email }}</span>
+            <button class="btn-compact-ghost w-full" @click="onLogout">Выйти</button>
+          </template>
+          <template v-else>
+            <RouterLink to="/login" class="btn-compact-ghost w-full text-center">Вход</RouterLink>
+            <RouterLink to="/register" class="btn-compact-amber w-full text-center">
+              Регистрация
+            </RouterLink>
+          </template>
         </div>
       </div>
     </div>
   </header>
 </template>
+
+<style scoped>
+.nav-link {
+  color: #a1a1aa;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: color 180ms ease;
+}
+.nav-link:hover { color: #f5f5f5; }
+.nav-link--active { color: #f59e0b; }
+
+.btn-compact-ghost {
+  padding: 0.45rem 0.95rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #d4d4d8;
+  font-size: 0.85rem;
+  font-weight: 500;
+  background: transparent;
+  transition: border-color 180ms ease, color 180ms ease;
+  cursor: pointer;
+}
+.btn-compact-ghost:hover { color: #fff; border-color: rgba(255, 255, 255, 0.25); }
+
+.btn-compact-amber {
+  padding: 0.45rem 0.95rem;
+  border-radius: 0.5rem;
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #18181b;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+}
+</style>

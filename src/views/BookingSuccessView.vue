@@ -3,131 +3,85 @@ import { computed } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
 import AppIcon from '@/components/AppIcon.vue'
-import { findMovieById } from '@/data/cinema'
+import {
+  findHall,
+  findMovie,
+  findSession,
+  formatDateLabel,
+  formatTime,
+} from '@/data/cinema'
 
 const route = useRoute()
 
-const movie = computed(() => findMovieById((route.query.movie as string) ?? ''))
-const showtime = computed(() => {
-  const sid = route.query.session as string | undefined
-  return movie.value?.showtimes.find((s) => s.id === sid)
-})
-const seats = computed(() => {
-  const raw = route.query.seats as string | undefined
-  return raw ? raw.split(',').filter(Boolean) : []
-})
-const total = computed(() => (route.query.total as string) ?? '0')
+const session = computed(() => findSession(route.query.session as string | undefined))
+const movie = computed(() =>
+  session.value ? findMovie(session.value.movieId) : undefined,
+)
+const hall = computed(() =>
+  session.value ? findHall(session.value.hallId) : undefined,
+)
 
-const bookingCode = `CNM-${Math.random().toString(36).slice(2, 7).toUpperCase()}${Math.floor(Math.random() * 90 + 10)}`
+const seats = computed(() => {
+  const raw = route.query.seats
+  const str = typeof raw === 'string' ? raw : ''
+  return str ? str.split(',').filter(Boolean) : []
+})
+const total = computed(() =>
+  typeof route.query.total === 'string' ? route.query.total : '0',
+)
+
+const bookingCode = `CNM-${Math.random().toString(36).slice(2, 7).toUpperCase()}`
 </script>
 
 <template>
-  <section class="stage relative overflow-hidden" style="min-height: 100vh; padding-top: 120px">
-    <div class="spotlight" />
-
-    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 pb-24">
-      <div class="text-center mb-10">
+  <section class="stage" style="min-height: 100vh; padding-top: 120px">
+    <div class="max-w-xl mx-auto px-4 pb-16">
+      <div class="text-center mb-8">
         <div class="success-mark">
-          <span class="ping-ring success-mark__ring" />
-          <AppIcon name="check" :size="36" fill="#18181b" />
+          <AppIcon name="check" :size="30" fill="#18181b" />
         </div>
-        <p class="eyebrow mt-8 mb-3">Бронирование подтверждено</p>
-        <h1
-          class="display"
-          style="color: #fff; font-size: clamp(2.25rem, 5vw, 3.5rem); line-height: 1.05"
-        >
-          Билеты ждут вас<br /><span style="color: #f59e0b">у входа в зал</span>
+        <p class="eyebrow mt-6 mb-2">Бронирование подтверждено</p>
+        <h1 class="display" style="color: #fff; font-size: clamp(1.75rem, 4vw, 2.5rem)">
+          Места забронированы
         </h1>
-        <p
-          class="mt-5 max-w-xl mx-auto"
-          style="color: #a1a1aa; font-size: 1rem; line-height: 1.6"
-        >
-          Копия брони отправлена на почту. Покажите QR-код или номер брони на стойке — и можете
-          идти смотреть кино.
-        </p>
       </div>
 
-      <!-- Ticket card, CSS-only, no poster backdrop -->
       <div class="ticket">
-        <div class="ticket__stub">
-          <div class="ticket__barcode" aria-hidden="true">
-            <span v-for="n in 28" :key="n" :style="{ flex: (n % 3 ? 1 : 2) }" />
-          </div>
-          <div class="text-center" style="font-family: var(--font-display); letter-spacing: 0.2em">
-            <div style="color: #52525b; font-size: 0.65rem">BOOKING</div>
-            <div style="color: #f59e0b; font-size: 1.3rem">{{ bookingCode }}</div>
-          </div>
+        <div class="ticket__code">
+          <span style="color: #52525b; font-size: 0.65rem; letter-spacing: 0.2em">BOOKING</span>
+          <span class="display" style="color: #f59e0b; font-size: 1.3rem; letter-spacing: 0.15em">
+            {{ bookingCode }}
+          </span>
         </div>
 
-        <div class="ticket__body">
-          <div class="flex items-center gap-3 mb-6">
-            <div
-              class="w-9 h-9 rounded-xl flex items-center justify-center"
-              style="background: linear-gradient(135deg, #f59e0b, #d97706)"
-            >
-              <AppIcon name="film" :size="16" fill="#fff" />
-            </div>
-            <span
-              style="
-                font-family: var(--font-display);
-                letter-spacing: 0.14em;
-                color: #f5f5f5;
-                font-size: 1.05rem;
-              "
-            >
-              <span style="color: #f59e0b">CINE</span>MAX
-            </span>
+        <h2 class="display mb-1" style="color: #fff; font-size: 1.4rem">
+          {{ movie?.title ?? 'Сеанс' }}
+        </h2>
+        <p v-if="hall" style="color: #a1a1aa; font-size: 0.85rem">{{ hall.name }}</p>
+
+        <dl class="ticket__grid">
+          <div>
+            <dt>Дата</dt>
+            <dd>{{ session ? formatDateLabel(session.startDateTime.slice(0, 10)) : '—' }}</dd>
           </div>
-
-          <h2
-            class="display mb-1"
-            style="color: #fff; font-size: clamp(1.6rem, 3vw, 2.1rem)"
-          >
-            {{ movie?.title ?? 'Ваш сеанс' }}
-          </h2>
-          <div class="flex flex-wrap items-center gap-2 mb-6">
-            <span v-if="showtime" class="chip-muted">{{ showtime.format }}</span>
-            <span v-if="showtime" class="chip-muted">{{ showtime.hall }}</span>
-            <span v-if="movie" class="chip-muted">{{ movie.ageRating }}</span>
+          <div>
+            <dt>Время</dt>
+            <dd>{{ session ? formatTime(session.startDateTime) : '—' }}</dd>
           </div>
-
-          <dl class="ticket__grid">
-            <div>
-              <dt>Дата</dt>
-              <dd>{{ showtime?.dateLabel ?? '—' }}</dd>
-            </div>
-            <div>
-              <dt>Время</dt>
-              <dd>{{ showtime?.time ?? '—' }}</dd>
-            </div>
-            <div>
-              <dt>Места</dt>
-              <dd>{{ seats.length ? seats.join(', ') : '—' }}</dd>
-            </div>
-            <div>
-              <dt>Сумма</dt>
-              <dd style="color: #f59e0b; font-weight: 700">{{ total }} сом</dd>
-            </div>
-          </dl>
-
-          <div class="ticket__divider" />
-
-          <div class="flex flex-col sm:flex-row gap-3">
-            <RouterLink to="/" class="btn-amber flex-1 justify-center">
-              <AppIcon name="ticket" :size="18" />
-              На главную
-            </RouterLink>
-            <button class="btn-ghost flex-1 justify-center" type="button">
-              <AppIcon name="calendar" :size="16" />
-              Добавить в календарь
-            </button>
+          <div>
+            <dt>Места</dt>
+            <dd>{{ seats.length ? seats.join(', ') : '—' }}</dd>
           </div>
-        </div>
-      </div>
+          <div>
+            <dt>Сумма</dt>
+            <dd style="color: #f59e0b; font-weight: 700">{{ total }} сом</dd>
+          </div>
+        </dl>
 
-      <div class="flex items-center justify-center gap-2 mt-8" style="color: #52525b; font-size: 0.8rem">
-        <AppIcon name="clock" :size="14" />
-        Приходите за 15 минут до начала сеанса
+        <RouterLink to="/" class="btn-amber w-full justify-center mt-6">
+          <AppIcon name="film" :size="16" />
+          На главную
+        </RouterLink>
       </div>
     </div>
   </section>
@@ -135,100 +89,49 @@ const bookingCode = `CNM-${Math.random().toString(36).slice(2, 7).toUpperCase()}
 
 <style scoped>
 .success-mark {
-  position: relative;
-  width: 84px;
-  height: 84px;
+  width: 72px;
+  height: 72px;
   margin: 0 auto;
   border-radius: 9999px;
   display: grid;
   place-items: center;
   background: linear-gradient(135deg, #f59e0b, #d97706);
-  box-shadow: 0 0 48px rgba(245, 158, 11, 0.45);
-}
-.success-mark__ring {
-  position: absolute;
-  inset: -8px;
-  border-radius: 9999px;
-  border: 2px solid rgba(245, 158, 11, 0.5);
+  box-shadow: 0 0 40px rgba(245, 158, 11, 0.4);
 }
 
 .ticket {
-  display: grid;
-  grid-template-columns: 1fr;
-  border-radius: 1.5rem;
-  overflow: hidden;
   background: #14141c;
   border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 0 40px 90px rgba(0, 0, 0, 0.55);
+  border-radius: 1rem;
+  padding: 1.75rem;
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.45);
 }
-@media (min-width: 720px) {
-  .ticket { grid-template-columns: 220px 1fr; }
-}
-.ticket__stub {
-  position: relative;
-  padding: 1.75rem 1.25rem;
-  background:
-    radial-gradient(ellipse at 50% 0%, rgba(245, 158, 11, 0.22), transparent 60%),
-    linear-gradient(180deg, #1a1a24 0%, #0b0b12 100%);
+.ticket__code {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1.5rem;
-  border-right: 2px dashed rgba(255, 255, 255, 0.12);
+  gap: 0.2rem;
+  padding-bottom: 1rem;
+  margin-bottom: 1.25rem;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.12);
 }
-.ticket__stub::before,
-.ticket__stub::after {
-  content: "";
-  position: absolute;
-  width: 24px;
-  height: 24px;
-  right: -12px;
-  border-radius: 9999px;
-  background: #08080e;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-}
-.ticket__stub::before { top: -12px; }
-.ticket__stub::after { bottom: -12px; }
 
-.ticket__barcode {
-  display: flex;
-  gap: 2px;
-  width: 100%;
-  height: 90px;
-  align-items: stretch;
-}
-.ticket__barcode span {
-  background: rgba(245, 245, 245, 0.9);
-  border-radius: 1px;
-}
-.ticket__barcode span:nth-child(3n) { background: #f59e0b; }
-.ticket__barcode span:nth-child(5n) { background: rgba(255, 255, 255, 0.25); }
-
-.ticket__body {
-  padding: clamp(1.75rem, 3vw, 2.5rem);
-}
 .ticket__grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1rem 1.5rem;
+  margin-top: 1.25rem;
 }
 .ticket__grid dt {
   color: #71717a;
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   font-weight: 600;
-  letter-spacing: 0.15em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.25rem;
 }
 .ticket__grid dd {
   color: #f5f5f5;
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 600;
-}
-.ticket__divider {
-  height: 1px;
-  margin: 1.5rem 0;
-  background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.1), transparent);
 }
 </style>
