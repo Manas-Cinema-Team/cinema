@@ -21,7 +21,7 @@ const posterFailed = ref(false)
       <div v-if="posterFailed" class="movie-card__fallback">
         <div class="movie-card__fallback-grid" />
         <AppIcon name="film" :size="36" fill="rgba(245,158,11,0.45)" />
-        <span class="display" style="color: #f5f5f5; font-size: 1.1rem; letter-spacing: 0.06em">
+        <span class="display movie-card__fallback-title">
           {{ movie.title }}
         </span>
       </div>
@@ -40,7 +40,7 @@ const posterFailed = ref(false)
       <div class="movie-card__meta">
         <AppIcon name="clock" :size="12" />
         <span>{{ formatDuration(movie.duration) }}</span>
-        <span style="color: rgba(255, 255, 255, 0.2)">·</span>
+        <span class="movie-card__sep">·</span>
         <span>{{ movie.genre[0] }}</span>
       </div>
     </div>
@@ -51,21 +51,22 @@ const posterFailed = ref(false)
 .movie-card {
   display: flex;
   flex-direction: column;
-  background: #14141c;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
   border-radius: 0.75rem;
   overflow: hidden;
   cursor: pointer;
   transition: border-color 200ms ease, transform 200ms ease;
+  box-shadow: var(--shadow-card);
 }
 .movie-card:hover {
-  border-color: rgba(245, 158, 11, 0.3);
+  border-color: var(--amber);
   transform: translateY(-3px);
 }
 
 .movie-card__poster {
   position: relative;
-  background: #0b0b12;
+  background: var(--bg-elev-2);
   overflow: hidden;
 }
 .movie-card__poster img {
@@ -87,16 +88,21 @@ const posterFailed = ref(false)
   text-align: center;
   background:
     radial-gradient(ellipse at 50% 30%, rgba(245, 158, 11, 0.18), transparent 60%),
-    linear-gradient(180deg, #1a1a24 0%, #0b0b12 100%);
+    var(--bg-elev-2);
 }
 .movie-card__fallback-grid {
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+    linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px);
   background-size: 28px 28px;
   opacity: 0.6;
+}
+.movie-card__fallback-title {
+  color: var(--text);
+  font-size: 1.1rem;
+  letter-spacing: 0.06em;
 }
 
 .movie-card__rating {
@@ -105,10 +111,10 @@ const posterFailed = ref(false)
   right: 8px;
   padding: 2px 8px;
   border-radius: 4px;
-  background: rgba(8, 8, 14, 0.8);
+  background: color-mix(in srgb, var(--bg) 75%, transparent);
   backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #e4e4e7;
+  border: 1px solid var(--line);
+  color: var(--text);
   font-size: 0.7rem;
   font-weight: 600;
 }
@@ -117,7 +123,7 @@ const posterFailed = ref(false)
   padding: 0.85rem 0.95rem 1rem;
 }
 .movie-card__title {
-  color: #fff;
+  color: var(--text);
   font-size: 0.95rem;
   font-weight: 600;
   margin-bottom: 0.35rem;
@@ -129,7 +135,8 @@ const posterFailed = ref(false)
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  color: #a1a1aa;
+  color: var(--text-dim);
   font-size: 0.78rem;
 }
+.movie-card__sep { color: var(--line-strong); }
 </style>

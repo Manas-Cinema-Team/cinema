@@ -161,5 +161,14 @@ defineProps<{
     <template v-else-if="name === 'facebook'">
       <path d="M13 22v-8h3l.5-4H13V7.5c0-1 .3-1.7 1.7-1.7H17V2.1A24 24 0 0 0 14.3 2C11.7 2 10 3.6 10 6.6V10H7v4h3v8h3Z" />
     </template>
+    <!-- sun -->
+    <template v-else-if="name === 'sun'">
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+    </template>
+    <!-- moon -->
+    <template v-else-if="name === 'moon'">
+      <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" />
+    </template>
   </svg>
 </template>

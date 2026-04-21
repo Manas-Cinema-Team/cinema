@@ -3,7 +3,8 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import AppIcon from '@/components/AppIcon.vue'
-import { formatDateLabel, formatTime, scheduleItems } from '@/data/cinema'
+import { formatDateLabel, formatPrice, formatTime, scheduleItems } from '@/data/cinema'
+import { t } from '@/stores/i18n'
 
 const router = useRouter()
 
@@ -23,12 +24,9 @@ const openSeats = (sessionId: string) => {
 <template>
   <section class="stage" style="min-height: 100vh; padding-top: 96px">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-      <p class="eyebrow mb-2">Расписание</p>
-      <h1
-        class="display mb-8"
-        style="color: #fff; font-size: clamp(2rem, 4vw, 3rem)"
-      >
-        Сеансы
+      <p class="eyebrow mb-2">{{ t('schedule.eyebrow') }}</p>
+      <h1 class="display page-title">
+        {{ t('schedule.title') }}
       </h1>
 
       <div class="flex gap-2 mb-8 overflow-x-auto pb-2">
@@ -43,8 +41,8 @@ const openSeats = (sessionId: string) => {
         </button>
       </div>
 
-      <div v-if="forDate.length === 0" class="surface p-10 text-center" style="color: #71717a">
-        На эту дату сеансов нет.
+      <div v-if="forDate.length === 0" class="empty-box">
+        {{ t('schedule.noSessions') }}
       </div>
 
       <div v-else class="flex flex-col gap-2">
@@ -58,23 +56,18 @@ const openSeats = (sessionId: string) => {
             {{ formatTime(item.session.startDateTime) }}
           </div>
           <div class="schedule-row__movie">
-            <div style="color: #fff; font-size: 0.95rem; font-weight: 600">
+            <div class="schedule-row__title">
               {{ item.movie.title }}
             </div>
-            <div style="color: #71717a; font-size: 0.78rem">
+            <div class="schedule-row__sub">
               {{ item.movie.genre.join(', ') }} · {{ item.movie.ageRating }}
             </div>
           </div>
-          <div class="schedule-row__hall" style="color: #a1a1aa; font-size: 0.85rem">
+          <div class="schedule-row__hall">
             {{ item.hall.name }}
           </div>
           <div class="schedule-row__price">
-            <div style="color: #f59e0b; font-weight: 700">
-              от {{ item.session.priceStandard }} сом
-            </div>
-            <div style="color: #52525b; font-size: 0.72rem">
-              VIP {{ item.session.priceVip }} сом
-            </div>
+            {{ formatPrice(item.session.price) }}
           </div>
           <AppIcon name="chevron-right" :size="16" />
         </div>
@@ -84,50 +77,81 @@ const openSeats = (sessionId: string) => {
 </template>
 
 <style scoped>
+.page-title {
+  color: var(--text);
+  font-size: clamp(2rem, 4vw, 3rem);
+  margin-bottom: 2rem;
+}
+
+.empty-box {
+  padding: 2.5rem;
+  border-radius: 0.75rem;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+  text-align: center;
+}
+
 .date-tab {
   flex-shrink: 0;
   padding: 0.65rem 1.1rem;
   border-radius: 0.65rem;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  color: #a1a1aa;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  color: var(--text-muted);
   font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 180ms ease;
 }
 .date-tab:hover {
-  color: #fff;
-  border-color: rgba(255, 255, 255, 0.15);
+  color: var(--text);
+  border-color: var(--line-strong);
 }
 .date-tab--active {
   background: rgba(245, 158, 11, 0.15);
-  border-color: rgba(245, 158, 11, 0.35);
-  color: #f59e0b;
+  border-color: rgba(245, 158, 11, 0.45);
+  color: var(--amber);
 }
 
 .schedule-row {
   display: grid;
-  grid-template-columns: 80px 1fr 180px 140px auto;
+  grid-template-columns: 80px 1fr 180px 120px auto;
   gap: 1rem;
   align-items: center;
   padding: 1rem;
   border-radius: 0.75rem;
-  background: #14141c;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
   cursor: pointer;
-  color: #a1a1aa;
+  color: var(--text-muted);
+  box-shadow: var(--shadow-card);
   transition: border-color 180ms ease;
 }
 .schedule-row:hover {
-  border-color: rgba(245, 158, 11, 0.3);
+  border-color: var(--amber);
 }
 .schedule-row__time {
-  color: #fff;
+  color: var(--text);
   font-size: 1.3rem;
   letter-spacing: 0.04em;
 }
+.schedule-row__title {
+  color: var(--text);
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+.schedule-row__sub {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+}
+.schedule-row__hall {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
 .schedule-row__price {
+  color: var(--amber);
+  font-weight: 700;
   text-align: right;
 }
 

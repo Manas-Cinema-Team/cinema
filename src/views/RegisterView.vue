@@ -4,6 +4,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import AppIcon from '@/components/AppIcon.vue'
 import { register } from '@/stores/auth'
+import { t } from '@/stores/i18n'
 
 const router = useRouter()
 const route = useRoute()
@@ -16,11 +17,11 @@ const submit = (e: Event) => {
   e.preventDefault()
   error.value = ''
   if (password.value.length < 6) {
-    error.value = 'Пароль должен быть не короче 6 символов.'
+    error.value = t('auth.errorShort')
     return
   }
   if (password.value !== confirm.value) {
-    error.value = 'Пароли не совпадают.'
+    error.value = t('auth.errorMismatch')
     return
   }
   register(email.value)
@@ -32,14 +33,14 @@ const submit = (e: Event) => {
 <template>
   <section class="stage flex items-center justify-center" style="min-height: 100vh; padding: 120px 1rem 4rem">
     <div class="auth-card">
-      <p class="eyebrow mb-2">Регистрация</p>
-      <h1 class="display mb-6" style="color: #fff; font-size: 1.8rem">
-        Создайте аккаунт
+      <p class="eyebrow mb-2">{{ t('auth.register') }}</p>
+      <h1 class="display auth-card__title">
+        {{ t('auth.signUpTitle') }}
       </h1>
 
       <form class="flex flex-col gap-4" @submit="submit">
         <label class="field">
-          <span class="field__label">Email</span>
+          <span class="field__label">{{ t('auth.email') }}</span>
           <div class="field__control">
             <AppIcon name="mail" :size="16" />
             <input
@@ -53,44 +54,44 @@ const submit = (e: Event) => {
         </label>
 
         <label class="field">
-          <span class="field__label">Пароль</span>
+          <span class="field__label">{{ t('auth.password') }}</span>
           <div class="field__control">
             <AppIcon name="lock" :size="16" />
             <input
               v-model="password"
               type="password"
               required
-              placeholder="Минимум 6 символов"
+              :placeholder="t('auth.passwordMin')"
               autocomplete="new-password"
             />
           </div>
         </label>
 
         <label class="field">
-          <span class="field__label">Повторите пароль</span>
+          <span class="field__label">{{ t('auth.passwordConfirm') }}</span>
           <div class="field__control">
             <AppIcon name="lock" :size="16" />
             <input
               v-model="confirm"
               type="password"
               required
-              placeholder="Повторите пароль"
+              :placeholder="t('auth.passwordConfirm')"
               autocomplete="new-password"
             />
           </div>
         </label>
 
-        <p v-if="error" style="color: #ef4444; font-size: 0.82rem">{{ error }}</p>
+        <p v-if="error" class="auth-card__error">{{ error }}</p>
 
         <button class="btn-amber w-full mt-2" type="submit">
           <AppIcon name="ticket" :size="16" />
-          Создать аккаунт
+          {{ t('auth.signUpSubmit') }}
         </button>
       </form>
 
-      <p class="mt-6 text-center" style="color: #71717a; font-size: 0.85rem">
-        Уже есть аккаунт?
-        <RouterLink to="/login" style="color: #f59e0b; font-weight: 600">Войти</RouterLink>
+      <p class="auth-card__switch">
+        {{ t('auth.hasAccount') }}
+        <RouterLink to="/login" class="auth-card__link">{{ t('auth.goLogin') }}</RouterLink>
       </p>
     </div>
   </section>
@@ -100,19 +101,39 @@ const submit = (e: Event) => {
 .auth-card {
   width: 100%;
   max-width: 420px;
-  background: #14141c;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
   border-radius: 1rem;
   padding: 2rem;
-  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-card);
 }
+.auth-card__title {
+  color: var(--text);
+  font-size: 1.8rem;
+  margin-bottom: 1.5rem;
+}
+.auth-card__switch {
+  margin-top: 1.5rem;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+.auth-card__link {
+  color: var(--amber);
+  font-weight: 600;
+}
+.auth-card__error {
+  color: var(--red);
+  font-size: 0.82rem;
+}
+
 .field {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
 }
 .field__label {
-  color: #a1a1aa;
+  color: var(--text-dim);
   font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.05em;
@@ -124,22 +145,22 @@ const submit = (e: Event) => {
   gap: 0.6rem;
   padding: 0.75rem 0.9rem;
   border-radius: 0.6rem;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: #71717a;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  color: var(--text-dim);
   transition: border-color 180ms ease, background 180ms ease;
 }
 .field__control:focus-within {
-  border-color: rgba(245, 158, 11, 0.4);
-  background: rgba(245, 158, 11, 0.04);
+  border-color: rgba(245, 158, 11, 0.45);
+  background: rgba(245, 158, 11, 0.05);
 }
 .field__control input {
   flex: 1;
   background: transparent;
   border: none;
   outline: none;
-  color: #fff;
+  color: var(--text);
   font-size: 0.95rem;
 }
-.field__control input::placeholder { color: #52525b; }
+.field__control input::placeholder { color: var(--text-fade); }
 </style>

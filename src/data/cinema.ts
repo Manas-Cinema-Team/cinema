@@ -1,12 +1,12 @@
+import { locale } from '@/stores/i18n'
+
 // ── Типы соответствуют сущностям из ТЗ (Movie, Hall, Session, BookingSeat) ──
 
-export type SeatKind = 'standard' | 'vip'
 export type SeatStatus = 'available' | 'held' | 'booked'
 
 export interface SeatMeta {
   row: string
   number: number
-  kind: SeatKind
   disabled?: boolean
 }
 
@@ -45,19 +45,23 @@ export interface Session {
   startDateTime: string
   durationMinutes: number
   isActive: boolean
-  priceStandard: number
-  priceVip: number
+  price: number
 }
 
 // ── Залы ─────────────────────────────────────────────────────────────────
-const buildHall = (id: string, name: string, rows: string[], perRow: number, vipRows: string[], disabled: string[] = []): Hall => {
+const buildHall = (
+  id: string,
+  name: string,
+  rows: string[],
+  perRow: number,
+  disabled: string[] = [],
+): Hall => {
   const seats: SeatMeta[] = []
   for (const row of rows) {
     for (let n = 1; n <= perRow; n++) {
       seats.push({
         row,
         number: n,
-        kind: vipRows.includes(row) ? 'vip' : 'standard',
         disabled: disabled.includes(`${row}${n}`),
       })
     }
@@ -72,9 +76,9 @@ const buildHall = (id: string, name: string, rows: string[], perRow: number, vip
 }
 
 export const halls: Hall[] = [
-  buildHall('hall-1', 'Зал 1 · Большой', ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'], 12, ['G', 'H']),
-  buildHall('hall-2', 'Зал 2 · Комфорт', ['A', 'B', 'C', 'D', 'E', 'F'], 10, ['E', 'F']),
-  buildHall('hall-3', 'Зал 3 · VIP', ['A', 'B', 'C', 'D'], 8, ['C', 'D']),
+  buildHall('hall-1', 'Зал 1 · Большой', ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'], 12),
+  buildHall('hall-2', 'Зал 2 · Комфорт', ['A', 'B', 'C', 'D', 'E', 'F'], 10),
+  buildHall('hall-3', 'Зал 3 · Камерный', ['A', 'B', 'C', 'D'], 8),
 ]
 
 export const findHall = (id: string | undefined) => halls.find((h) => h.id === id)
@@ -170,8 +174,7 @@ const buildSession = (
   date: string,
   time: string,
   duration: number,
-  priceStandard: number,
-  priceVip: number,
+  price: number,
 ): Session => ({
   id,
   movieId,
@@ -179,27 +182,26 @@ const buildSession = (
   startDateTime: `${date}T${time}:00`,
   durationMinutes: duration,
   isActive: true,
-  priceStandard,
-  priceVip,
+  price,
 })
 
 export const sessions: Session[] = [
   // 19 апреля
-  buildSession('ses-101', 'midnight-arc',   'hall-1', TODAY, '12:00', 128, 450, 750),
-  buildSession('ses-102', 'golden-station', 'hall-2', TODAY, '14:30', 114, 400, 650),
-  buildSession('ses-103', 'velvet-sky',     'hall-2', TODAY, '17:00', 121, 400, 650),
-  buildSession('ses-104', 'midnight-arc',   'hall-1', TODAY, '19:30', 128, 500, 800),
-  buildSession('ses-105', 'silent-code',    'hall-3', TODAY, '21:00', 135, 600, 900),
-  buildSession('ses-106', 'paper-lantern',  'hall-2', TODAY, '10:30', 96,  350, 550),
+  buildSession('ses-101', 'midnight-arc',   'hall-1', TODAY, '12:00', 128, 450),
+  buildSession('ses-102', 'golden-station', 'hall-2', TODAY, '14:30', 114, 400),
+  buildSession('ses-103', 'velvet-sky',     'hall-2', TODAY, '17:00', 121, 400),
+  buildSession('ses-104', 'midnight-arc',   'hall-1', TODAY, '19:30', 128, 500),
+  buildSession('ses-105', 'silent-code',    'hall-3', TODAY, '21:00', 135, 550),
+  buildSession('ses-106', 'paper-lantern',  'hall-2', TODAY, '10:30', 96,  350),
   // 20 апреля
-  buildSession('ses-201', 'red-line',       'hall-1', '2026-04-20', '13:00', 118, 450, 750),
-  buildSession('ses-202', 'golden-station', 'hall-2', '2026-04-20', '15:30', 114, 400, 650),
-  buildSession('ses-203', 'midnight-arc',   'hall-1', '2026-04-20', '18:00', 128, 500, 800),
-  buildSession('ses-204', 'silent-code',    'hall-3', '2026-04-20', '20:30', 135, 600, 900),
+  buildSession('ses-201', 'red-line',       'hall-1', '2026-04-20', '13:00', 118, 450),
+  buildSession('ses-202', 'golden-station', 'hall-2', '2026-04-20', '15:30', 114, 400),
+  buildSession('ses-203', 'midnight-arc',   'hall-1', '2026-04-20', '18:00', 128, 500),
+  buildSession('ses-204', 'silent-code',    'hall-3', '2026-04-20', '20:30', 135, 550),
   // 21 апреля
-  buildSession('ses-301', 'velvet-sky',     'hall-1', '2026-04-21', '14:00', 121, 450, 750),
-  buildSession('ses-302', 'paper-lantern',  'hall-2', '2026-04-21', '11:00', 96,  350, 550),
-  buildSession('ses-303', 'red-line',       'hall-1', '2026-04-21', '21:00', 118, 500, 800),
+  buildSession('ses-301', 'velvet-sky',     'hall-1', '2026-04-21', '14:00', 121, 450),
+  buildSession('ses-302', 'paper-lantern',  'hall-2', '2026-04-21', '11:00', 96,  350),
+  buildSession('ses-303', 'red-line',       'hall-1', '2026-04-21', '21:00', 118, 500),
 ]
 
 export const findSession = (id: string | string[] | undefined) => {
@@ -211,18 +213,42 @@ export const findSession = (id: string | string[] | undefined) => {
 export const formatDuration = (minutes: number): string => {
   const h = Math.floor(minutes / 60)
   const m = minutes % 60
-  return `${h} ч ${String(m).padStart(2, '0')} мин`
+  const mm = String(m).padStart(2, '0')
+  if (locale.value === 'en') return `${h}h ${mm}m`
+  if (locale.value === 'ky') return `${h} с ${mm} мүн`
+  return `${h} ч ${mm} мин`
 }
 
-export const formatPrice = (amount: number): string => `${amount} сом`
+export const formatPrice = (amount: number): string => {
+  const currency = locale.value === 'en' ? 'som' : 'сом'
+  return `${amount} ${currency}`
+}
 
-const WEEKDAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб']
-const MONTHS = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
+const WEEKDAYS: Record<'ru' | 'en' | 'ky', string[]> = {
+  ru: ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'],
+  en: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+  ky: ['жк', 'дш', 'шш', 'шр', 'бш', 'жм', 'иш'],
+}
+const MONTHS: Record<'ru' | 'en' | 'ky', string[]> = {
+  ru: ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'],
+  en: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+  ky: ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'],
+}
+const TODAY_LABEL: Record<'ru' | 'en' | 'ky', string> = {
+  ru: 'Сегодня',
+  en: 'Today',
+  ky: 'Бүгүн',
+}
 
 export const formatDateLabel = (isoDate: string): string => {
-  if (isoDate === TODAY) return 'Сегодня'
+  const l = locale.value
+  if (isoDate === TODAY) return TODAY_LABEL[l]
   const d = new Date(isoDate + 'T00:00:00')
-  return `${WEEKDAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]}`
+  const wd = WEEKDAYS[l][d.getDay()]
+  const m = MONTHS[l][d.getMonth()]
+  const day = d.getDate()
+  if (l === 'en') return `${wd}, ${m} ${day}`
+  return `${wd}, ${day} ${m}`
 }
 
 export const formatTime = (iso: string): string => iso.slice(11, 16)

@@ -4,15 +4,16 @@ import { RouterView, useRoute } from 'vue-router'
 
 import AppFooter from '@/components/layout/AppFooter.vue'
 import AppHeader from '@/components/layout/AppHeader.vue'
+import '@/stores/i18n'
+import '@/stores/theme'
 
 const route = useRoute()
 const hideFooter = computed(() => route.name === 'booking-success' || route.name === 'not-found')
-const hideHeader = computed(() => false)
 </script>
 
 <template>
-  <div class="min-h-screen flex flex-col" style="background: #08080e; color: #f5f5f5">
-    <AppHeader v-if="!hideHeader" />
+  <div class="min-h-screen flex flex-col app-shell">
+    <AppHeader />
     <main class="flex-1">
       <RouterView v-slot="{ Component }">
         <transition name="route-fade" mode="out-in">
@@ -23,3 +24,10 @@ const hideHeader = computed(() => false)
     <AppFooter v-if="!hideFooter" />
   </div>
 </template>
+
+<style scoped>
+.app-shell {
+  background: var(--bg);
+  color: var(--text);
+}
+</style>

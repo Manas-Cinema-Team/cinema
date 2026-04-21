@@ -7,9 +7,11 @@ import {
   findMovie,
   formatDateLabel,
   formatDuration,
+  formatPrice,
   formatTime,
   sessionsForMovie,
 } from '@/data/cinema'
+import { t } from '@/stores/i18n'
 
 const route = useRoute()
 const router = useRouter()
@@ -40,21 +42,17 @@ const openSeats = (sessionId: string) => {
 
 <template>
   <div v-if="!movie" class="stage flex items-center justify-center" style="min-height: 100vh">
-    <div class="text-center" style="color: #71717a">
-      Фильм не найден.
-      <button class="btn-amber mt-6" @click="router.push('/movies')">В афишу</button>
+    <div class="not-found">
+      {{ t('movie.notFound') }}
+      <button class="btn-amber mt-6" @click="router.push('/movies')">{{ t('movie.toAfisha') }}</button>
     </div>
   </div>
 
   <section v-else class="stage" style="min-height: 100vh; padding-top: 96px">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-      <button
-        class="flex items-center gap-2 mb-6"
-        style="color: #a1a1aa; font-size: 0.85rem"
-        @click="router.back()"
-      >
+      <button class="back-btn" @click="router.back()">
         <AppIcon name="arrow-left" :size="16" />
-        Назад
+        {{ t('common.back') }}
       </button>
 
       <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-10">
@@ -62,7 +60,7 @@ const openSeats = (sessionId: string) => {
           <div class="poster-frame" style="aspect-ratio: 2 / 3; max-width: 320px">
             <div v-if="posterFailed" class="poster-fallback">
               <AppIcon name="film" :size="44" fill="rgba(245,158,11,0.45)" />
-              <span class="display" style="color: #f5f5f5; font-size: 1.2rem">
+              <span class="display poster-fallback__title">
                 {{ movie.title }}
               </span>
             </div>
@@ -79,48 +77,32 @@ const openSeats = (sessionId: string) => {
           <div class="flex flex-wrap gap-2 mb-4">
             <span v-for="g in movie.genre" :key="g" class="chip">{{ g }}</span>
           </div>
-          <h1
-            class="display mb-4"
-            style="color: #fff; font-size: clamp(2rem, 5vw, 3.5rem); line-height: 1"
-          >
+          <h1 class="display movie-title">
             {{ movie.title }}
           </h1>
 
-          <div class="flex flex-wrap items-center gap-4 mb-6" style="color: #a1a1aa">
+          <div class="movie-meta">
             <div class="flex items-center gap-1.5">
               <AppIcon name="clock" :size="16" />
-              <span style="font-size: 0.9rem">{{ formatDuration(movie.duration) }}</span>
+              <span class="movie-meta__duration">{{ formatDuration(movie.duration) }}</span>
             </div>
-            <span
-              class="px-2.5 py-1 rounded-md"
-              style="
-                background: rgba(255, 255, 255, 0.06);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                color: #e4e4e7;
-                font-size: 0.8rem;
-                font-weight: 600;
-              "
-            >
-              {{ movie.ageRating }}
-            </span>
-            <span style="color: #71717a; font-size: 0.85rem">
-              Премьера: {{ movie.releaseDate }}
-            </span>
+            <span class="movie-meta__rating">{{ movie.ageRating }}</span>
+            <span class="movie-meta__release">{{ t('movie.release') }}: {{ movie.releaseDate }}</span>
           </div>
 
-          <p style="color: #a1a1aa; font-size: 0.95rem; line-height: 1.7">
+          <p class="movie-description">
             {{ movie.description }}
           </p>
         </div>
       </div>
 
       <div>
-        <h2 class="display mb-4" style="color: #fff; font-size: 1.5rem">
-          Сеансы
+        <h2 class="display section-heading">
+          {{ t('movie.sessions') }}
         </h2>
 
-        <div v-if="dates.length === 0" class="surface p-8 text-center" style="color: #71717a">
-          Нет запланированных сеансов.
+        <div v-if="dates.length === 0" class="surface p-8 text-center empty-sessions">
+          {{ t('movie.noSessions') }}
         </div>
 
         <template v-else>
@@ -143,14 +125,14 @@ const openSeats = (sessionId: string) => {
               class="session-btn"
               @click="openSeats(item.session.id)"
             >
-              <span class="display" style="color: #fff; font-size: 1.4rem">
+              <span class="session-btn__time display">
                 {{ formatTime(item.session.startDateTime) }}
               </span>
-              <span style="color: #a1a1aa; font-size: 0.78rem">
+              <span class="session-btn__hall">
                 {{ item.hall.name }}
               </span>
-              <span style="color: #f59e0b; font-size: 0.8rem; font-weight: 600">
-                от {{ item.session.priceStandard }} сом
+              <span class="session-btn__price">
+                {{ formatPrice(item.session.price) }}
               </span>
             </button>
           </div>
@@ -161,6 +143,24 @@ const openSeats = (sessionId: string) => {
 </template>
 
 <style scoped>
+.not-found {
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.back-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.back-btn:hover { color: var(--text); }
+
 .poster-fallback {
   position: absolute;
   inset: 0;
@@ -173,29 +173,77 @@ const openSeats = (sessionId: string) => {
   text-align: center;
   background:
     radial-gradient(ellipse at 50% 30%, rgba(245, 158, 11, 0.2), transparent 60%),
-    linear-gradient(180deg, #1a1a24 0%, #0b0b12 100%);
+    var(--bg-elev);
 }
+.poster-fallback__title {
+  color: var(--text);
+  font-size: 1.2rem;
+}
+
+.movie-title {
+  color: var(--text);
+  font-size: clamp(2rem, 5vw, 3.5rem);
+  line-height: 1;
+  margin-bottom: 1rem;
+}
+
+.movie-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  color: var(--text-dim);
+}
+.movie-meta__duration { font-size: 0.9rem; }
+.movie-meta__rating {
+  padding: 0.25rem 0.65rem;
+  border-radius: 0.4rem;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.movie-meta__release {
+  color: var(--text-fade);
+  font-size: 0.85rem;
+}
+
+.movie-description {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  line-height: 1.7;
+}
+
+.section-heading {
+  color: var(--text);
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.empty-sessions { color: var(--text-dim); }
 
 .date-tab {
   flex-shrink: 0;
   padding: 0.6rem 1rem;
   border-radius: 0.6rem;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  color: #a1a1aa;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  color: var(--text-muted);
   font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 180ms ease;
 }
 .date-tab:hover {
-  color: #fff;
-  border-color: rgba(255, 255, 255, 0.15);
+  color: var(--text);
+  border-color: var(--line-strong);
 }
 .date-tab--active {
   background: rgba(245, 158, 11, 0.15);
-  border-color: rgba(245, 158, 11, 0.35);
-  color: #f59e0b;
+  border-color: rgba(245, 158, 11, 0.45);
+  color: var(--amber);
 }
 
 .session-btn {
@@ -205,13 +253,26 @@ const openSeats = (sessionId: string) => {
   align-items: flex-start;
   padding: 0.85rem 1rem;
   border-radius: 0.7rem;
-  background: #14141c;
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
   cursor: pointer;
   transition: border-color 180ms ease, transform 180ms ease;
 }
 .session-btn:hover {
-  border-color: rgba(245, 158, 11, 0.35);
+  border-color: var(--amber);
   transform: translateY(-2px);
+}
+.session-btn__time {
+  color: var(--text);
+  font-size: 1.4rem;
+}
+.session-btn__hall {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+}
+.session-btn__price {
+  color: var(--amber);
+  font-size: 0.85rem;
+  font-weight: 700;
 }
 </style>
