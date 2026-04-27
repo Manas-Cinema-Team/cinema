@@ -4,6 +4,7 @@ import { RouterLink } from 'vue-router'
 
 import AppIcon from '@/components/AppIcon.vue'
 import MovieCard from '@/components/MovieCard.vue'
+import MovieCarousel from '@/components/MovieCarousel.vue'
 import {
   formatDateLabel,
   formatPrice,
@@ -12,6 +13,9 @@ import {
   upcomingSessions,
 } from '@/data/cinema'
 import { t } from '@/stores/i18n'
+
+// Берём первые 5 фильмов для карусели (популярные)
+const carouselMovies = computed(() => movies.slice(0, 5))
 
 const featured = computed(() => movies.slice(0, 4))
 const soon = computed(() => upcomingSessions(5))
@@ -42,6 +46,23 @@ const soon = computed(() => upcomingSessions(5))
           </RouterLink>
         </div>
       </div>
+    </section>
+
+    <!-- ── Карусель популярных фильмов ── -->
+    <section class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div class="flex items-end justify-between mb-6 gap-4">
+        <div>
+          <h2 class="display section-title">
+            🔥 Популярные фильмы
+          </h2>
+          <p class="section-sub">Хиты, которые сейчас смотрят все</p>
+        </div>
+        <RouterLink to="/movies" class="link-more">
+          Все фильмы
+          <AppIcon name="chevron-right" :size="14" />
+        </RouterLink>
+      </div>
+      <MovieCarousel :movies="carouselMovies" />
     </section>
 
     <!-- Afisha preview -->
@@ -125,6 +146,12 @@ const soon = computed(() => upcomingSessions(5))
 .section-title {
   color: var(--text);
   font-size: clamp(1.5rem, 3vw, 2rem);
+}
+
+.section-sub {
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  margin-top: 0.2rem;
 }
 
 .link-more {

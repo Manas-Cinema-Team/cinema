@@ -39,6 +39,36 @@ const onLogout = () => {
   logout()
   router.push('/')
 }
+
+// Инициалы пользователя для аватара
+const userInitials = computed(() => {
+  const email = currentUser.value?.email
+  if (!email) return '?'
+  return email.charAt(0).toUpperCase()
+})
+
+// Dropdown профиля
+const profileDropdownOpen = ref(false)
+const toggleProfileDropdown = () => {
+  profileDropdownOpen.value = !profileDropdownOpen.value
+}
+
+watch(
+  () => route.fullPath,
+  () => {
+    profileDropdownOpen.value = false
+  },
+)
+
+// Закрыть dropdown при клике вне
+const dropdownRef = ref<HTMLElement | null>(null)
+const onClickOutside = (e: MouseEvent) => {
+  if (dropdownRef.value && !dropdownRef.value.contains(e.target as Node)) {
+    profileDropdownOpen.value = false
+  }
+}
+onMounted(() => document.addEventListener('mousedown', onClickOutside))
+onUnmounted(() => document.removeEventListener('mousedown', onClickOutside))
 </script>
 
 <template>
@@ -86,14 +116,48 @@ const onLogout = () => {
             <AppIcon :name="theme === 'dark' ? 'sun' : 'moon'" :size="18" />
           </button>
 
+          <!-- Авторизован: иконка профиля с дропдауном -->
           <template v-if="isAuthenticated">
-            <span class="header-email">
-              {{ currentUser?.email }}
-            </span>
-            <button class="btn-compact-ghost" @click="onLogout">
-              {{ t('auth.logout') }}
-            </button>
+            <div class="profile-dropdown-wrap" ref="dropdownRef">
+              <button
+                class="profile-avatar-btn"
+                :class="{ 'profile-avatar-btn--open': profileDropdownOpen }"
+                :aria-label="'Профиль'"
+                @click="toggleProfileDropdown"
+              >
+                <span class="profile-avatar-initials">{{ userInitials }}</span>
+                <span class="profile-avatar-pulse" />
+              </button>
+
+              <transition name="dropdown">
+                <div v-if="profileDropdownOpen" class="profile-dropdown">
+                  <div class="profile-dropdown__header">
+                    <div class="profile-dropdown__avatar-lg">{{ userInitials }}</div>
+                    <div>
+                      <div class="profile-dropdown__email">{{ currentUser?.email }}</div>
+                      <div class="profile-dropdown__badge">Авторизован</div>
+                    </div>
+                  </div>
+                  <div class="profile-dropdown__divider" />
+                  <RouterLink to="/profile" class="profile-dropdown__item">
+                    <AppIcon name="user" :size="15" />
+                    Мой профиль
+                  </RouterLink>
+                  <RouterLink to="/booking/success" class="profile-dropdown__item">
+                    <AppIcon name="ticket" :size="15" />
+                    Мои билеты
+                  </RouterLink>
+                  <div class="profile-dropdown__divider" />
+                  <button class="profile-dropdown__item profile-dropdown__item--danger" @click="onLogout">
+                    <AppIcon name="log-out" :size="15" />
+                    Выйти
+                  </button>
+                </div>
+              </transition>
+            </div>
           </template>
+
+          <!-- Не авторизован -->
           <template v-else>
             <RouterLink to="/login" class="btn-compact-ghost">{{ t('auth.login') }}</RouterLink>
             <RouterLink to="/register" class="btn-compact-amber">{{ t('auth.register') }}</RouterLink>
@@ -115,6 +179,14 @@ const onLogout = () => {
           >
             <AppIcon :name="theme === 'dark' ? 'sun' : 'moon'" :size="18" />
           </button>
+
+          <!-- Мобильный: аватар профиля или меню -->
+          <template v-if="isAuthenticated">
+            <RouterLink to="/profile" class="profile-avatar-btn profile-avatar-btn--sm">
+              <span class="profile-avatar-initials">{{ userInitials }}</span>
+            </RouterLink>
+          </template>
+
           <button
             class="menu-btn"
             :aria-label="menuOpen ? t('aria.menuClose') : t('aria.menuOpen')"
@@ -142,13 +214,21 @@ const onLogout = () => {
         </RouterLink>
         <div class="pt-3 flex flex-col gap-2 app-header__drawer-foot">
           <template v-if="isAuthenticated">
-            <span class="header-email">{{ currentUser?.email }}</span>
+            <RouterLink to="/profile" class="drawer-profile-link">
+              <div class="profile-avatar-btn profile-avatar-btn--sm">
+                <span class="profile-avatar-initials">{{ userInitials }}</span>
+              </div>
+              <div>
+                <div class="drawer-profile-email">{{ currentUser?.email }}</div>
+                <div class="drawer-profile-sub">Перейти в профиль →</div>
+              </div>
+            </RouterLink>
             <button class="btn-compact-ghost w-full" @click="onLogout">{{ t('auth.logout') }}</button>
           </template>
           <template v-else>
             <RouterLink to="/login" class="btn-compact-ghost w-full text-center">{{ t('auth.login') }}</RouterLink>
             <RouterLink to="/register" class="btn-compact-amber w-full text-center">
-              {{ t('auth.register') }}
+              {{ t('auth.register') }} lox
             </RouterLink>
           </template>
         </div>
@@ -192,11 +272,6 @@ const onLogout = () => {
 .brand-text__accent { color: var(--amber); }
 .brand-text__plain { color: var(--text); }
 
-.header-email {
-  color: var(--text-muted);
-  font-size: 0.85rem;
-}
-
 .nav-link {
   color: var(--text-muted);
   font-size: 0.9rem;
@@ -239,6 +314,177 @@ const onLogout = () => {
 
 .menu-btn { color: var(--text); }
 
+/* ── Аватар профиля ── */
+.profile-dropdown-wrap {
+  position: relative;
+}
+
+.profile-avatar-btn {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--amber), var(--amber-dark));
+  border: 2px solid transparent;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: border-color 200ms ease, box-shadow 200ms ease, transform 150ms ease;
+  overflow: visible;
+}
+.profile-avatar-btn:hover,
+.profile-avatar-btn--open {
+  border-color: var(--amber);
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.25);
+  transform: scale(1.05);
+}
+.profile-avatar-btn--sm {
+  width: 32px;
+  height: 32px;
+}
+
+.profile-avatar-initials {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #18181b;
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Пульсирующая точка "онлайн" */
+.profile-avatar-pulse {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #22c55e;
+  border: 2px solid var(--bg);
+}
+.profile-avatar-pulse::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: rgba(34, 197, 94, 0.4);
+  animation: pulse-ring 2s ease-out infinite;
+}
+
+@keyframes pulse-ring {
+  0%   { transform: scale(0.6); opacity: 0.8; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+
+/* ── Dropdown меню профиля ── */
+.profile-dropdown {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 230px;
+  background: var(--bg-elev, var(--bg));
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.25), 0 4px 16px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  z-index: 100;
+}
+
+.profile-dropdown__header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem;
+}
+
+.profile-dropdown__avatar-lg {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--amber), var(--amber-dark));
+  display: grid;
+  place-items: center;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #18181b;
+  flex-shrink: 0;
+}
+
+.profile-dropdown__email {
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 600;
+  word-break: break-all;
+}
+.profile-dropdown__badge {
+  margin-top: 2px;
+  font-size: 0.7rem;
+  color: #22c55e;
+  font-weight: 500;
+}
+
+.profile-dropdown__divider {
+  height: 1px;
+  background: var(--line);
+  margin: 0;
+}
+
+.profile-dropdown__item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.7rem 1rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 150ms ease, color 150ms ease;
+  text-decoration: none;
+}
+.profile-dropdown__item:hover {
+  background: var(--surface-soft);
+  color: var(--text);
+}
+.profile-dropdown__item--danger:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+}
+
+/* Dropdown анимация */
+.dropdown-enter-active,
+.dropdown-leave-active {
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+.dropdown-enter-from,
+.dropdown-leave-to {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.97);
+}
+
+/* ── Мобильный ящик: профиль ── */
+.drawer-profile-link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0;
+  text-decoration: none;
+}
+.drawer-profile-email {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.drawer-profile-sub {
+  font-size: 0.72rem;
+  color: var(--amber);
+  margin-top: 1px;
+}
+
+/* ── Кнопки ── */
 .btn-compact-ghost {
   padding: 0.45rem 0.95rem;
   border-radius: 0.5rem;
