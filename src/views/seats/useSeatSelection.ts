@@ -4,8 +4,7 @@
 
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import type { Hall, Session } from '@/data/cinema'
-import type { SeatMeta } from '@/data/cinema'
+
 
 export type DisplayStatus = 'available' | 'held' | 'booked' | 'selected' | 'disabled'
 
@@ -33,7 +32,7 @@ export function useSeatSelection(
   const buildRemote = () => {
     const h = hall()
     if (!h) return
-    h.schema.rows.forEach((row: string, rowIdx: number) => {
+
       for (let col = 1; col <= h.schema.seatsPerRow; col++) {
         const key = `${row}${col}`
         const status = seedTaken(row, col, rowIdx)
@@ -46,7 +45,7 @@ export function useSeatSelection(
     const h = hall()
     if (!h) return
     const free: string[] = []
-    h.schema.seats.forEach((s: SeatMeta) => {
+
       if (s.disabled) return
       const key = `${s.row}${s.number}`
       if (!remoteStatus[key] && !selected.value.has(key)) free.push(key)
@@ -69,7 +68,7 @@ export function useSeatSelection(
   // ── Статус конкретного места ─────────────────────────────────────────
   const seatStatus = (row: string, col: number): DisplayStatus => {
     const key = `${row}${col}`
-    const seat = hall()?.schema.seats.find((s: SeatMeta) => s.row === row && s.number === col)
+
     if (seat?.disabled) return 'disabled'
     if (selected.value.has(key)) return 'selected'
     return remoteStatus[key] ?? 'available'
@@ -104,7 +103,7 @@ export function useSeatSelection(
     const s = session()
     if (selectedList.value.length === 0 || !s) return
     router.push({
-      name: 'payment',
+
       query: {
         session: s.id,
         seats: [...selected.value].join(','),
@@ -147,4 +146,4 @@ export function useSeatSelection(
     toggle,
     confirm,
   }
-}
+
