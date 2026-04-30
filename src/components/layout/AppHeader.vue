@@ -35,8 +35,8 @@ const navLinks = computed(() => [
   { label: t('nav.schedule'), to: '/schedule' },
 ])
 
-const onLogout = () => {
-  logout()
+const onLogout = async () => {
+  await logout()
   router.push('/')
 }
 
@@ -122,7 +122,7 @@ onUnmounted(() => document.removeEventListener('mousedown', onClickOutside))
               <button
                 class="relative grid h-9 w-9 place-items-center rounded-full border-2 border-transparent bg-[linear-gradient(135deg,var(--amber),var(--amber-dark))] transition duration-200"
                 :class="profileDropdownOpen ? 'scale-105 border-brand shadow-[0_0_0_3px_rgba(245,158,11,0.25)]' : 'hover:scale-105 hover:border-brand hover:shadow-[0_0_0_3px_rgba(245,158,11,0.25)]'"
-                :aria-label="'Профиль'"
+                :aria-label="t('header.profileAria')"
                 @click="toggleProfileDropdown"
               >
                 <span class="pointer-events-none select-none text-[0.85rem] font-bold leading-none text-zinc-900">{{ userInitials }}</span>
@@ -138,22 +138,22 @@ onUnmounted(() => document.removeEventListener('mousedown', onClickOutside))
                     <div class="grid h-[38px] w-[38px] shrink-0 place-items-center rounded-full bg-[linear-gradient(135deg,var(--amber),var(--amber-dark))] text-base font-bold text-zinc-900">{{ userInitials }}</div>
                     <div>
                       <div class="break-all text-[0.82rem] font-semibold text-copy">{{ currentUser?.email }}</div>
-                      <div class="mt-px text-[0.7rem] font-medium text-success">Авторизован</div>
+                      <div class="mt-px text-[0.7rem] font-medium text-success">{{ t('header.statusAuthorized') }}</div>
                     </div>
                   </div>
                   <div class="h-px bg-line" />
                   <RouterLink to="/profile" class="flex items-center gap-2.5 px-4 py-3 text-[0.85rem] text-muted transition hover:bg-surface-soft hover:text-copy">
                     <AppIcon name="user" :size="15" />
-                    Мой профиль
+                    {{ t('header.myProfile') }}
                   </RouterLink>
-                  <RouterLink to="/booking/success" class="flex items-center gap-2.5 px-4 py-3 text-[0.85rem] text-muted transition hover:bg-surface-soft hover:text-copy">
+                  <RouterLink to="/profile" class="flex items-center gap-2.5 px-4 py-3 text-[0.85rem] text-muted transition hover:bg-surface-soft hover:text-copy">
                     <AppIcon name="ticket" :size="15" />
-                    Мои билеты
+                    {{ t('header.myTickets') }}
                   </RouterLink>
                   <div class="h-px bg-line" />
                   <button class="flex w-full items-center gap-2.5 bg-transparent px-4 py-3 text-left text-[0.85rem] text-muted transition hover:bg-danger/10 hover:text-danger" @click="onLogout">
                     <AppIcon name="log-out" :size="15" />
-                    Выйти
+                    {{ t('auth.logout') }}
                   </button>
                 </div>
               </transition>
@@ -223,7 +223,7 @@ onUnmounted(() => document.removeEventListener('mousedown', onClickOutside))
               </div>
               <div>
                 <div class="text-[0.82rem] font-semibold text-copy">{{ currentUser?.email }}</div>
-                <div class="mt-px text-[0.72rem] text-brand">Перейти в профиль →</div>
+                <div class="mt-px text-[0.72rem] text-brand">{{ t('header.goToProfile') }} →</div>
               </div>
             </RouterLink>
             <button class="rounded-lg border border-line-strong px-4 py-2 text-[0.85rem] font-medium text-muted transition hover:border-brand hover:text-copy" @click="onLogout">{{ t('auth.logout') }}</button>

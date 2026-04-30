@@ -1,30 +1,39 @@
-// ── Все типы проекта (Movie, Hall, Session и т.д.) ──────────────────────
+export type SeatStatus = 'available' | 'held' | 'booked' | 'disabled'
 
-export type SeatStatus = 'available' | 'held' | 'booked'
-
-export interface SeatMeta {
-  row: string
+export interface SeatCoordinate {
+  row: number
   number: number
+}
+
+export interface HallSeatMeta extends SeatCoordinate {
+  type: string
   disabled?: boolean
 }
 
+export interface HallRow {
+  row: number
+  seats: Array<{
+    number: number
+    type: string
+  }>
+}
+
 export interface HallSchema {
-  rows: string[]
-  seatsPerRow: number
-  seats: SeatMeta[]
-  disabledSeats: string[]
+  rows: HallRow[]
+  seats: HallSeatMeta[]
+  disabledSeats: SeatCoordinate[]
 }
 
 export interface Hall {
-  id: string
+  id: number
   name: string
   rows: number
   seatsPerRow: number
-  schema: HallSchema
+  schema?: HallSchema
 }
 
 export interface Movie {
-  id: string
+  id: number
   title: string
   description: string
   genre: string[]
@@ -36,13 +45,15 @@ export interface Movie {
 }
 
 export interface Session {
-  id: string
-  movieId: string
-  hallId: string
+  id: number
+  movieId: number
+  hallId: number
   startDateTime: string
-  durationMinutes: number
+  endDateTime: string
   isActive: boolean
   price: number
+  currency: string
+  availableSeats: number
 }
 
 export interface ScheduleItem {
@@ -51,4 +62,45 @@ export interface ScheduleItem {
   hall: Hall
   date: string
   time: string
+}
+
+export interface SeatState extends SeatCoordinate {
+  type: string
+  status: SeatStatus
+  heldByMe: boolean
+  expiresAt: string | null
+  price: number | null
+  currency: string | null
+}
+
+export interface SeatMapData {
+  hallId: number
+  hallName: string
+  schema: HallSchema
+  seats: SeatState[]
+  pollingInterval: number
+  serverTime: string
+  availableSeats: number
+}
+
+export interface BookingSeat extends SeatCoordinate {
+  type: string
+  priceAtBooking: number
+}
+
+export interface Booking {
+  id: number
+  sessionId: number
+  movieTitle: string
+  hallName: string
+  startDateTime: string
+  seats: BookingSeat[]
+  totalAmount: number
+  currency: string
+  bookingStatus: 'draft' | 'confirmed' | 'cancelled' | 'expired'
+  paymentStatus: 'pending' | 'paid' | 'cancelled' | 'failed'
+  expiresAt: string | null
+  serverTime: string
+  confirmedAt: string | null
+  createdAt: string
 }

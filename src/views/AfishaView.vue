@@ -1,94 +1,112 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
+import { fetchMovies, getApiErrorMessage } from '@/api/cinema'
 import AppIcon from '@/components/AppIcon.vue'
 import MovieCard from '@/components/MovieCard.vue'
-import { movies } from '@/data/cinema'
+import type { Movie } from '@/data/cinema'
 import { t } from '@/stores/i18n'
 
-// ── Все уникальные жанры из данных ──
+const ALL_OPTION = '__all__'
+
+const movies = ref<Movie[]>([])
+const loading = ref(true)
+const error = ref('')
+
 const allGenres = computed(() => {
   const set = new Set<string>()
-  movies.forEach((m) => m.genre.forEach((g) => set.add(g)))
-  return ['Все', ...Array.from(set).sort()]
+  movies.value.forEach((movie) => movie.genre.forEach((genre) => set.add(genre)))
+  return Array.from(set).sort()
 })
 
-// ── Все возрастные рейтинги ──
 const allRatings = computed(() => {
   const set = new Set<string>()
-  movies.forEach((m) => set.add(m.ageRating))
-  return ['Все', ...Array.from(set).sort()]
+  movies.value.forEach((movie) => set.add(movie.ageRating))
+  return Array.from(set).sort()
 })
 
-// ── Состояние фильтров ──
 const search = ref('')
-const selectedGenre = ref('Все')
-const selectedRating = ref('Все')
-const sortBy = ref<'default' | 'price-asc' | 'price-desc' | 'duration'>('default')
+const selectedGenre = ref(ALL_OPTION)
+const selectedRating = ref(ALL_OPTION)
+const sortBy = ref<'default' | 'duration'>('default')
+
+const resultLabel = computed(() =>
+  filtered.value.length === movies.value.length
+    ? t('afisha.resultAll', { count: movies.value.length })
+    : t('afisha.resultFiltered', { shown: filtered.value.length, total: movies.value.length }),
+)
+
+const optionLabel = (value: string) => value === ALL_OPTION ? t('common.all') : value
 
 const resetFilters = () => {
   search.value = ''
-  selectedGenre.value = 'Все'
-  selectedRating.value = 'Все'
+  selectedGenre.value = ALL_OPTION
+  selectedRating.value = ALL_OPTION
   sortBy.value = 'default'
 }
 
-const hasActiveFilters = computed(
-  () =>
+const hasActiveFilters = computed(() => {
+  return (
     search.value !== '' ||
-    selectedGenre.value !== 'Все' ||
-    selectedRating.value !== 'Все' ||
-    sortBy.value !== 'default',
-)
+    selectedGenre.value !== ALL_OPTION ||
+    selectedRating.value !== ALL_OPTION ||
+    sortBy.value !== 'default'
+  )
+})
 
-// ── Фильтрация и сортировка ──
 const filtered = computed(() => {
-  let list = [...movies]
+  let list = [...movies.value]
 
-  // Поиск по названию
   if (search.value.trim()) {
-    const q = search.value.trim().toLowerCase()
-    list = list.filter((m) => m.title.toLowerCase().includes(q))
+    const query = search.value.trim().toLowerCase()
+    list = list.filter((movie) => movie.title.toLowerCase().includes(query))
   }
 
-  // Жанр
-  if (selectedGenre.value !== 'Все') {
-    list = list.filter((m) => m.genre.includes(selectedGenre.value))
+  if (selectedGenre.value !== ALL_OPTION) {
+    list = list.filter((movie) => movie.genre.includes(selectedGenre.value))
   }
 
-  // Возрастной рейтинг
-  if (selectedRating.value !== 'Все') {
-    list = list.filter((m) => m.ageRating === selectedRating.value)
+  if (selectedRating.value !== ALL_OPTION) {
+    list = list.filter((movie) => movie.ageRating === selectedRating.value)
   }
 
-  // Сортировка
   if (sortBy.value === 'duration') {
-    list.sort((a, b) => a.duration - b.duration)
+    list.sort((left, right) => left.duration - right.duration)
   }
 
   return list
 })
+
+const loadMoviesList = async () => {
+  loading.value = true
+  error.value = ''
+
+  try {
+    movies.value = await fetchMovies()
+  } catch (err) {
+    error.value = getApiErrorMessage(err, t('auth.requestFailed'))
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(loadMoviesList)
 </script>
 
 <template>
   <section class="stage min-h-screen pt-24">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-
-      <!-- Заголовок -->
       <p class="eyebrow mb-2">{{ t('afisha.eyebrow') }}</p>
       <h1 class="display mb-7 text-[clamp(2rem,4vw,3rem)] text-copy">{{ t('afisha.title') }}</h1>
 
-      <!-- ── Панель фильтров ── -->
       <div class="mb-6 flex flex-col gap-4 rounded-2xl border border-line bg-panel px-6 py-5 shadow-[var(--shadow-card)]">
-
-        <!-- Поиск -->
         <div class="relative flex items-center">
           <AppIcon name="search" :size="16" class="pointer-events-none absolute left-3.5 text-dim" />
           <input
             v-model="search"
             class="w-full rounded-xl border border-line bg-surface-soft py-2.5 pl-10 pr-10 text-[0.9rem] text-copy outline-none transition placeholder:text-fade focus:border-brand"
             type="text"
-            placeholder="Поиск по названию…"
+            :placeholder="t('afisha.searchPlaceholder')"
             autocomplete="off"
           />
           <button v-if="search" class="absolute right-3 rounded-md bg-transparent p-1 text-dim transition hover:text-copy" @click="search = ''">
@@ -96,49 +114,71 @@ const filtered = computed(() => {
           </button>
         </div>
 
-        <!-- Жанр -->
         <div class="flex flex-col gap-2">
-          <label class="text-[0.7rem] font-bold uppercase tracking-[0.1em] text-dim">Жанр</label>
+          <label class="text-[0.7rem] font-bold uppercase tracking-[0.1em] text-dim">{{ t('afisha.genre') }}</label>
           <div class="flex flex-wrap gap-1.5">
             <button
-              v-for="g in allGenres"
-              :key="g"
+              :key="ALL_OPTION"
               class="rounded-full border px-3 py-1.5 text-[0.78rem] font-medium transition"
               :class="
-                selectedGenre === g
+                selectedGenre === ALL_OPTION
                   ? 'border-brand/50 bg-brand/15 font-semibold text-brand'
                   : 'border-line bg-surface-soft text-muted hover:border-line-strong hover:text-copy'
               "
-              @click="selectedGenre = g"
+              @click="selectedGenre = ALL_OPTION"
             >
-              {{ g }}
+              {{ optionLabel(ALL_OPTION) }}
+            </button>
+            <button
+              v-for="genre in allGenres"
+              :key="genre"
+              class="rounded-full border px-3 py-1.5 text-[0.78rem] font-medium transition"
+              :class="
+                selectedGenre === genre
+                  ? 'border-brand/50 bg-brand/15 font-semibold text-brand'
+                  : 'border-line bg-surface-soft text-muted hover:border-line-strong hover:text-copy'
+              "
+              @click="selectedGenre = genre"
+            >
+              {{ optionLabel(genre) }}
             </button>
           </div>
         </div>
 
-        <!-- Возраст + Сортировка -->
         <div class="flex flex-wrap items-end gap-4">
           <div class="flex flex-col gap-2">
-            <label class="text-[0.7rem] font-bold uppercase tracking-[0.1em] text-dim">Возраст</label>
+            <label class="text-[0.7rem] font-bold uppercase tracking-[0.1em] text-dim">{{ t('afisha.age') }}</label>
             <div class="flex flex-wrap gap-1.5">
               <button
-                v-for="r in allRatings"
-                :key="r"
+                :key="`${ALL_OPTION}-rating`"
                 class="rounded-full border px-3 py-1.5 text-[0.78rem] font-medium transition"
                 :class="
-                  selectedRating === r
+                  selectedRating === ALL_OPTION
                     ? 'border-brand/50 bg-brand/15 font-semibold text-brand'
                     : 'border-line bg-surface-soft text-muted hover:border-line-strong hover:text-copy'
                 "
-                @click="selectedRating = r"
+                @click="selectedRating = ALL_OPTION"
               >
-                {{ r }}
+                {{ optionLabel(ALL_OPTION) }}
+              </button>
+              <button
+                v-for="rating in allRatings"
+                :key="rating"
+                class="rounded-full border px-3 py-1.5 text-[0.78rem] font-medium transition"
+                :class="
+                  selectedRating === rating
+                    ? 'border-brand/50 bg-brand/15 font-semibold text-brand'
+                    : 'border-line bg-surface-soft text-muted hover:border-line-strong hover:text-copy'
+                "
+                @click="selectedRating = rating"
+              >
+                {{ optionLabel(rating) }}
               </button>
             </div>
           </div>
 
           <div class="flex flex-col gap-2">
-            <label class="text-[0.7rem] font-bold uppercase tracking-[0.1em] text-dim">Сортировка</label>
+            <label class="text-[0.7rem] font-bold uppercase tracking-[0.1em] text-dim">{{ t('afisha.sort') }}</label>
             <div class="flex flex-wrap gap-1.5">
               <button
                 class="rounded-full border px-3 py-1.5 text-[0.78rem] font-medium transition"
@@ -149,7 +189,7 @@ const filtered = computed(() => {
                 "
                 @click="sortBy = 'default'"
               >
-                По умолчанию
+                {{ t('afisha.sortDefault') }}
               </button>
               <button
                 class="rounded-full border px-3 py-1.5 text-[0.78rem] font-medium transition"
@@ -160,50 +200,46 @@ const filtered = computed(() => {
                 "
                 @click="sortBy = 'duration'"
               >
-                По длительности
+                {{ t('afisha.sortDuration') }}
               </button>
             </div>
           </div>
 
-          <!-- Сброс -->
           <button
             v-if="hasActiveFilters"
             class="inline-flex h-fit items-center gap-1.5 rounded-lg border border-danger/30 bg-danger/10 px-3 py-1.5 text-[0.78rem] font-medium text-danger transition hover:bg-danger/20"
             @click="resetFilters"
           >
             <AppIcon name="rotate-ccw" :size="13" />
-            Сбросить
+            {{ t('afisha.reset') }}
           </button>
         </div>
       </div>
 
-      <!-- Результат / счётчик -->
       <div class="mb-4">
-        <span class="text-[0.82rem] text-dim">
-          {{ filtered.length === movies.length
-            ? `${movies.length} фильмов`
-            : `Найдено: ${filtered.length} из ${movies.length}` }}
-        </span>
+        <span class="text-[0.82rem] text-dim">{{ resultLabel }}</span>
       </div>
 
-      <!-- Сетка фильмов -->
-      <div v-if="filtered.length > 0" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
-        <MovieCard v-for="m in filtered" :key="m.id" :movie="m" />
+      <div v-if="error" class="mb-4 rounded-xl border border-danger/20 bg-danger/10 p-4 text-sm text-danger">
+        {{ error }}
       </div>
-
-      <!-- Ничего не найдено -->
+      <div v-else-if="loading" class="rounded-xl border border-line bg-panel p-6 text-sm text-dim">
+        {{ t('afisha.loading') }}
+      </div>
+      <div v-else-if="filtered.length > 0" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
+        <MovieCard v-for="movie in filtered" :key="movie.id" :movie="movie" />
+      </div>
       <div v-else class="flex flex-col items-center justify-center px-4 py-16 text-center">
         <div class="mb-5 grid h-[72px] w-[72px] place-items-center rounded-full border border-line bg-surface-soft text-dim">
           <AppIcon name="search" :size="32" />
         </div>
-        <div class="mb-1.5 text-[1.1rem] font-bold text-copy">Ничего не найдено</div>
-        <div class="max-w-[280px] text-[0.85rem] text-dim">Попробуйте изменить фильтры или поисковый запрос</div>
+        <div class="mb-1.5 text-[1.1rem] font-bold text-copy">{{ t('afisha.emptyTitle') }}</div>
+        <div class="max-w-[280px] text-[0.85rem] text-dim">{{ t('afisha.emptyText') }}</div>
         <button class="btn-ghost mt-4" @click="resetFilters">
           <AppIcon name="rotate-ccw" :size="14" />
-          Сбросить фильтры
+          {{ t('afisha.resetFilters') }}
         </button>
       </div>
-
     </div>
   </section>
 </template>

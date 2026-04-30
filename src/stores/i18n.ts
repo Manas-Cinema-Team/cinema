@@ -13,7 +13,13 @@ const STORAGE_KEY = 'cinema.locale'
 export const LOCALE_LABELS: Record<Locale, string> = {
   ru: 'RU',
   en: 'EN',
-  ky: 'KG',
+  ky: 'KY',
+}
+
+export const INTL_LOCALES: Record<Locale, string> = {
+  ru: 'ru-RU',
+  en: 'en-US',
+  ky: 'ky-KG',
 }
 
 // ── Словари теперь живут в src/messages/ ─────────────────────────────────
@@ -35,6 +41,7 @@ const load = (): Locale => {
 export const locale = ref<Locale>(load())
 
 export const localeLabel = computed(() => LOCALE_LABELS[locale.value])
+export const currentIntlLocale = computed(() => INTL_LOCALES[locale.value])
 
 const apply = (l: Locale) => {
   if (typeof document !== 'undefined') document.documentElement.lang = l

@@ -1,149 +1,308 @@
-// ── Вся логика выбора мест, таймера и поллинга ───────────────────────────
-// Раньше жила прямо в SeatsView.vue (script setup).
-// Теперь SeatsView только импортирует этот composable.
-
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
+import { createOrReuseBookingHold, fetchSeatMap, fetchSessionDetail, getApiErrorMessage, isApiError } from '@/api/cinema'
+import { formatDateLabel, formatSeatLabel, type Hall, type Movie, type ScheduleItem, type SeatMapData } from '@/data/cinema'
+import { clearCart, setCart } from '@/stores/cart'
+import { t } from '@/stores/i18n'
 
-export type DisplayStatus = 'available' | 'held' | 'booked' | 'selected' | 'disabled'
+export type DisplayStatus = 'available' | 'held' | 'held-self' | 'booked' | 'selected' | 'disabled'
 
 const MAX_SEATS = 8
-const HOLD_SECONDS = 10 * 60
 
-export function useSeatSelection(
-  session: () => Session | undefined,
-  hall: () => Hall | undefined,
-  sessionId: () => string | undefined,
-) {
+const seatKey = (row: number, number: number) => `${row}:${number}`
+
+const parseSeatKey = (value: string): { row: number; number: number } => {
+  const [rawRow = '0', rawNumber = '0'] = value.split(':')
+  return {
+    row: Number(rawRow),
+    number: Number(rawNumber),
+  }
+}
+
+export function useSeatSelection(sessionId: () => string | undefined) {
   const router = useRouter()
 
-  // ── Статусы с сервера (поллинг / seed) ───────────────────────────────
-  const remoteStatus = reactive<Record<string, 'booked' | 'held'>>({})
-  const selected = ref<Set<string>>(new Set())
+  const sessionItem = ref<ScheduleItem | null>(null)
+  const seatMap = ref<SeatMapData | null>(null)
+  const selectedKeys = ref<Set<string>>(new Set())
+  const loading = ref(true)
+  const loadError = ref('')
+  const actionError = ref('')
+  const isSubmitting = ref(false)
+  const now = ref(Date.now())
 
-  const seedTaken = (row: string, col: number, rowIdx: number): 'booked' | 'held' | null => {
-    const seed = (rowIdx * 31 + col * 17 + (sessionId() ?? '').length * 11) % 100
-    if (seed < 10) return 'booked'
-    if (seed < 16) return 'held'
-    return null
-  }
+  let pollTimer: ReturnType<typeof setInterval> | null = null
+  const countdownTimer = setInterval(() => {
+    now.value = Date.now()
+  }, 1000)
 
-  const buildRemote = () => {
-    const h = hall()
-    if (!h) return
+  const movie = computed<Movie | null>(() => sessionItem.value?.movie || null)
+  const hall = computed<Hall | null>(() => {
+    if (!sessionItem.value) return null
+    return {
+      ...sessionItem.value.hall,
+      schema: seatMap.value?.schema,
+    }
+  })
+  const pollingInterval = computed(() => seatMap.value?.pollingInterval ?? 5)
+  const currency = computed(() => sessionItem.value?.session.currency || 'KGS')
 
-      for (let col = 1; col <= h.schema.seatsPerRow; col++) {
-        const key = `${row}${col}`
-        const status = seedTaken(row, col, rowIdx)
-        if (status) remoteStatus[key] = status
-      }
-    })
-  }
-
-  const pollTick = () => {
-    const h = hall()
-    if (!h) return
-    const free: string[] = []
-
-      if (s.disabled) return
-      const key = `${s.row}${s.number}`
-      if (!remoteStatus[key] && !selected.value.has(key)) free.push(key)
-    })
-    if (free.length === 0) return
-    const pick = free[Math.floor(Math.random() * free.length)]
-    if (!pick) return
-    remoteStatus[pick] = Math.random() < 0.5 ? 'held' : 'booked'
-  }
-
-  // ── Hold-таймер ──────────────────────────────────────────────────────
-  const secondsLeft = ref(HOLD_SECONDS)
-
-  const timerLabel = computed(() => {
-    const m = Math.floor(secondsLeft.value / 60)
-    const s = secondsLeft.value % 60
-    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  const seatLookup = computed(() => {
+    const map = new Map<string, SeatMapData['seats'][number]>()
+    for (const seat of seatMap.value?.seats || []) {
+      map.set(seatKey(seat.row, seat.number), seat)
+    }
+    return map
   })
 
-  // ── Статус конкретного места ─────────────────────────────────────────
-  const seatStatus = (row: string, col: number): DisplayStatus => {
-    const key = `${row}${col}`
+  const selectedList = computed(() =>
+    [...selectedKeys.value]
+      .map((key) => {
+        const { row, number } = parseSeatKey(key)
+        const seat = seatLookup.value.get(key)
+        return {
+          row,
+          number,
+          key,
+          label: formatSeatLabel(row, number),
+          type: seat?.type ?? 'standard',
+          price: seat?.price ?? sessionItem.value?.session.price ?? 0,
+        }
+      })
+      .sort((left, right) => (left.row - right.row) || (left.number - right.number)),
+  )
 
-    if (seat?.disabled) return 'disabled'
-    if (selected.value.has(key)) return 'selected'
-    return remoteStatus[key] ?? 'available'
+  const total = computed(() => selectedList.value.reduce((sum, seat) => sum + seat.price, 0))
+
+  const heldByMeSeats = computed(() =>
+    (seatMap.value?.seats || [])
+      .filter((seat) => seat.status === 'held' && seat.heldByMe && seat.expiresAt)
+      .sort((left, right) => (left.expiresAt || '').localeCompare(right.expiresAt || '')),
+  )
+
+  const expiresAt = computed(() => heldByMeSeats.value[0]?.expiresAt || null)
+  const secondsLeft = computed(() => {
+    if (!expiresAt.value) return 0
+    return Math.max(0, Math.floor((new Date(expiresAt.value).getTime() - now.value) / 1000))
+  })
+  const timerLabel = computed(() => {
+    const minutes = Math.floor(secondsLeft.value / 60)
+    const seconds = secondsLeft.value % 60
+    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+  })
+
+  const syncCart = () => {
+    if (!sessionItem.value || selectedList.value.length === 0) {
+      clearCart()
+      return
+    }
+
+    setCart({
+      sessionId: sessionItem.value.session.id,
+      movieTitle: sessionItem.value.movie.title,
+      hallName: sessionItem.value.hall.name,
+      date: formatDateLabel(sessionItem.value.date),
+      time: sessionItem.value.time,
+      currency: currency.value,
+      seats: selectedList.value.map((seat) => ({
+        row: seat.row,
+        number: seat.number,
+        label: seat.label,
+        price: seat.price,
+      })),
+    })
   }
 
-  // ── Клик по месту ────────────────────────────────────────────────────
-  const toggle = (row: string, col: number) => {
-    const key = `${row}${col}`
-    const status = seatStatus(row, col)
-    if (status === 'held' || status === 'booked' || status === 'disabled') return
-    const next = new Set(selected.value)
+  const pruneSelection = () => {
+    const next = new Set<string>()
+    for (const key of selectedKeys.value) {
+      const seat = seatLookup.value.get(key)
+      if (seat?.status === 'available') {
+        next.add(key)
+      }
+    }
+    selectedKeys.value = next
+  }
+
+  const refreshSeatMapOnly = async () => {
+    if (!sessionItem.value) return
+
+    try {
+      seatMap.value = await fetchSeatMap(sessionItem.value.session.id)
+      pruneSelection()
+      syncCart()
+    } catch (err) {
+      loadError.value = getApiErrorMessage(err, t('auth.requestFailed'))
+    }
+  }
+
+  const restartPolling = () => {
+    if (pollTimer) clearInterval(pollTimer)
+    pollTimer = setInterval(() => {
+      void refreshSeatMapOnly()
+    }, pollingInterval.value * 1000)
+  }
+
+  const loadSeatPage = async (rawSessionId: string) => {
+    loading.value = true
+    loadError.value = ''
+    actionError.value = ''
+    selectedKeys.value = new Set()
+    now.value = Date.now()
+    clearCart()
+
+    try {
+      const numericSessionId = Number(rawSessionId)
+      const [session, map] = await Promise.all([
+        fetchSessionDetail(numericSessionId),
+        fetchSeatMap(numericSessionId),
+      ])
+      sessionItem.value = session
+      seatMap.value = map
+      syncCart()
+      restartPolling()
+    } catch (err) {
+      sessionItem.value = null
+      seatMap.value = null
+      loadError.value = getApiErrorMessage(err, t('auth.requestFailed'))
+    } finally {
+      loading.value = false
+    }
+  }
+
+  watch(
+    () => sessionId(),
+    (value) => {
+      if (!value) {
+        sessionItem.value = null
+        seatMap.value = null
+        loadError.value = t('seats.notFound')
+        loading.value = false
+        clearCart()
+        return
+      }
+
+      void loadSeatPage(value)
+    },
+    { immediate: true },
+  )
+
+  watch(
+    () => pollingInterval.value,
+    () => {
+      if (sessionItem.value) {
+        restartPolling()
+      }
+    },
+  )
+
+  watch(
+    () => selectedList.value.map((seat) => seat.key).join(','),
+    () => {
+      syncCart()
+    },
+  )
+
+  onUnmounted(() => {
+    if (pollTimer) clearInterval(pollTimer)
+    clearInterval(countdownTimer)
+    clearCart()
+  })
+
+  const reload = async () => {
+    const value = sessionId()
+    if (!value) {
+      loadError.value = t('seats.notFound')
+      return
+    }
+
+    await loadSeatPage(value)
+  }
+
+  const seatStatus = (row: number, number: number): DisplayStatus => {
+    const key = seatKey(row, number)
+    const seat = seatLookup.value.get(key)
+
+    if (!seat) return 'disabled'
+    if (selectedKeys.value.has(key)) return 'selected'
+    if (seat.status === 'held' && seat.heldByMe) return 'held-self'
+    return seat.status
+  }
+
+  const toggle = (row: number, number: number) => {
+    actionError.value = ''
+    const status = seatStatus(row, number)
+
+    if (status === 'held' || status === 'held-self' || status === 'booked' || status === 'disabled') {
+      return
+    }
+
+    const key = seatKey(row, number)
+    const next = new Set(selectedKeys.value)
+
     if (next.has(key)) {
       next.delete(key)
     } else {
       if (next.size >= MAX_SEATS) return
       next.add(key)
     }
-    selected.value = next
+
+    selectedKeys.value = next
   }
 
-  // ── Производные ─────────────────────────────────────────────────────
-  const selectedList = computed(() =>
-    [...selected.value]
-      .map((k) => ({ row: k.charAt(0), col: Number(k.slice(1)), key: k }))
-      .sort((a, b) => a.key.localeCompare(b.key)),
-  )
+  const confirm = async () => {
+    if (!sessionItem.value || selectedList.value.length === 0) return
 
-  const total = computed(() => selectedList.value.length * (session()?.price ?? 0))
+    isSubmitting.value = true
+    actionError.value = ''
 
-  // ── Подтверждение → переход на success ───────────────────────────────
-  const confirm = () => {
-    const s = session()
-    if (selectedList.value.length === 0 || !s) return
-    router.push({
+    try {
+      const booking = await createOrReuseBookingHold(
+        sessionItem.value.session.id,
+        selectedList.value.map((seat) => ({
+          row: seat.row,
+          number: seat.number,
+        })),
+      )
+      clearCart()
+      router.push({
+        name: 'payment',
+        query: {
+          booking: String(booking.id),
+        },
+      })
+    } catch (err) {
+      actionError.value = getApiErrorMessage(err, t('auth.requestFailed'))
 
-      query: {
-        session: s.id,
-        seats: [...selected.value].join(','),
-        total: String(total.value),
-      },
-    })
-  }
-
-  // ── Lifecycle ────────────────────────────────────────────────────────
-  let holdTimer: ReturnType<typeof setInterval> | null = null
-  let pollTimer: ReturnType<typeof setInterval> | null = null
-
-  onMounted(() => {
-    buildRemote()
-    holdTimer = setInterval(() => {
-      if (secondsLeft.value > 0) {
-        secondsLeft.value -= 1
-      } else {
-        if (holdTimer) clearInterval(holdTimer)
-        selected.value.clear()
+      if (isApiError(err, 'SEAT_HELD') || isApiError(err, 'HOLD_EXPIRED')) {
+        await refreshSeatMapOnly()
       }
-    }, 1000)
-    pollTimer = setInterval(pollTick, 7000)
-  })
-
-  onUnmounted(() => {
-    if (holdTimer) clearInterval(holdTimer)
-    if (pollTimer) clearInterval(pollTimer)
-  })
+    } finally {
+      isSubmitting.value = false
+    }
+  }
 
   return {
     MAX_SEATS,
+    loading,
+    loadError,
+    actionError,
+    isSubmitting,
+    movie,
+    hall,
+    session: computed(() => sessionItem.value?.session || null),
+    pollingInterval,
+    availableSeats: computed(() => seatMap.value?.availableSeats ?? 0),
+    expiresAt,
     secondsLeft,
     timerLabel,
-    remoteStatus,
-    selected,
     selectedList,
     total,
+    currency,
+    reload,
     seatStatus,
     toggle,
     confirm,
   }
-
+}

@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory, type RouteLocationNormalized } from 'vue-router'
 
-import { isAuthenticated } from '@/stores/auth'
+import { ensureAuthReady, isAuthenticated } from '@/stores/auth'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -43,7 +43,9 @@ const router = createRouter({
   },
 })
 
-router.beforeEach((to: RouteLocationNormalized) => {
+router.beforeEach(async (to: RouteLocationNormalized) => {
+  await ensureAuthReady()
+
   if (to.meta.requiresAuth && !isAuthenticated.value) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }

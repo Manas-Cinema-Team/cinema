@@ -1,14 +1,10 @@
 <script setup lang="ts">
-// ── Общая форма для LoginView и RegisterView ─────────────────────────────
-// Различия передаются через props: mode='login' | 'register'
-//
-// LoginView:    <AuthForm mode="login" />
-// RegisterView: <AuthForm mode="register" />
-
-import { ref, computed } from 'vue'
+import { computed, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
+
 import AppIcon from '@/components/AppIcon.vue'
-import { login } from '@/stores/auth'
+import { ApiError } from '@/api/client'
+import { login, register } from '@/stores/auth'
 import { t } from '@/stores/i18n'
 
 const props = defineProps<{ mode: 'login' | 'register' }>()
@@ -23,10 +19,11 @@ const email           = ref('')
 const password        = ref('')
 const passwordConfirm = ref('')
 const error           = ref('')
+const isSubmitting    = ref(false)
 
 // ── Валидация (только для register) ──────────────────────────────────────
 const validate = (): boolean => {
-  if (password.value.length < 6) {
+  if (password.value.length < 8) {
     error.value = t('auth.errorShort')
     return false
   }
@@ -39,12 +36,30 @@ const validate = (): boolean => {
 }
 
 // ── Сабмит ────────────────────────────────────────────────────────────────
-const submit = (e: Event) => {
+const submit = async (e: Event) => {
   e.preventDefault()
   if (!validate()) return
-  login(email.value)
-  const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/'
-  router.push(redirect)
+
+  isSubmitting.value = true
+  try {
+    if (isLogin.value) {
+      await login(email.value, password.value)
+    } else {
+      await register(email.value, password.value, passwordConfirm.value)
+    }
+
+    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/'
+    router.push(redirect)
+  } catch (err) {
+    if (err instanceof ApiError) {
+      error.value = err.message
+      return
+    }
+
+    error.value = t('auth.requestFailed')
+  } finally {
+    isSubmitting.value = false
+  }
 }
 </script>
 
@@ -106,9 +121,9 @@ const submit = (e: Event) => {
         <!-- Ошибка валидации -->
         <p v-if="error" class="auth-card__error">{{ error }}</p>
 
-        <button class="btn-amber w-full mt-2" type="submit">
+        <button class="btn-amber w-full mt-2" type="submit" :disabled="isSubmitting">
           <AppIcon name="ticket" :size="16" />
-          {{ isLogin ? t('auth.signInSubmit') : t('auth.signUpSubmit') }}
+          {{ isSubmitting ? '...' : isLogin ? t('auth.signInSubmit') : t('auth.signUpSubmit') }}
         </button>
       </form>
 

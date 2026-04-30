@@ -2,19 +2,25 @@ import type { ScheduleItem } from './types.ts'
 import { halls, movies, sessions } from './mock-data'
 import { formatTime } from './formatters'
 
-// ── Поиск по id ───────────────────────────────────────────────────────────
-
-export const findHall = (id: string | undefined) =>
-  halls.find((h) => h.id === id)
-
-export const findMovie = (id: string | string[] | undefined) => {
-  const key = Array.isArray(id) ? id[0] : id
-  return movies.find((m) => m.id === key)
+const normalizeNumericId = (id: number | string | string[] | undefined) => {
+  const raw = Array.isArray(id) ? id[0] : id
+  const parsed = typeof raw === 'number' ? raw : Number(raw)
+  return Number.isFinite(parsed) ? parsed : null
 }
 
-export const findSession = (id: string | string[] | undefined) => {
-  const key = Array.isArray(id) ? id[0] : id
-  return sessions.find((s) => s.id === key)
+export const findHall = (id: number | string | undefined) => {
+  const key = normalizeNumericId(id)
+  return key === null ? undefined : halls.find((hall) => hall.id === key)
+}
+
+export const findMovie = (id: number | string | string[] | undefined) => {
+  const key = normalizeNumericId(id)
+  return key === null ? undefined : movies.find((movie) => movie.id === key)
+}
+
+export const findSession = (id: number | string | string[] | undefined) => {
+  const key = normalizeNumericId(id)
+  return key === null ? undefined : sessions.find((session) => session.id === key)
 }
 
 // ── Производные выборки ───────────────────────────────────────────────────
@@ -40,5 +46,5 @@ export const scheduleItems = (): ScheduleItem[] =>
 export const upcomingSessions = (limit = 6): ScheduleItem[] =>
   scheduleItems().slice(0, limit)
 
-export const sessionsForMovie = (movieId: string): ScheduleItem[] =>
+export const sessionsForMovie = (movieId: number): ScheduleItem[] =>
   scheduleItems().filter((x) => x.movie.id === movieId)

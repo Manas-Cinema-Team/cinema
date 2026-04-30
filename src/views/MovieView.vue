@@ -2,48 +2,65 @@
 import { computed, ref, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
+import { fetchMovieDetail, getApiErrorMessage } from '@/api/cinema'
 import AppIcon from '@/components/AppIcon.vue'
-import {
-  findMovie,
-  formatDateLabel,
-  formatDuration,
-  formatPrice,
-  formatTime,
-  sessionsForMovie,
-} from '@/data/cinema'
+import { formatDateLabel, formatDuration, formatPrice, formatTime, type Movie, type ScheduleItem } from '@/data/cinema'
 import { t } from '@/stores/i18n'
 
 const route = useRoute()
 const router = useRouter()
 
-const movie = computed(() => findMovie(route.params.id))
-const sessions = computed(() => (movie.value ? sessionsForMovie(movie.value.id) : []))
+const movie = ref<Movie | null>(null)
+const sessions = ref<ScheduleItem[]>([])
+const loading = ref(true)
+const error = ref('')
+const posterFailed = ref(false)
+const selectedDate = ref('')
 
-const dates = computed(() => [...new Set(sessions.value.map((s) => s.date))])
-const selectedDate = ref<string>('')
+const movieId = computed(() => Number(route.params.id))
+const dates = computed(() => [...new Set(sessions.value.map((session) => session.date))])
+const forSelectedDate = computed(() => sessions.value.filter((session) => session.date === selectedDate.value))
 
 watchEffect(() => {
-  const first = dates.value[0]
-  if (first && !dates.value.includes(selectedDate.value)) {
-    selectedDate.value = first
+  const firstDate = dates.value[0]
+  if (firstDate && !dates.value.includes(selectedDate.value)) {
+    selectedDate.value = firstDate
   }
 })
 
-const forSelectedDate = computed(() =>
-  sessions.value.filter((s) => s.date === selectedDate.value),
-)
+watchEffect(async () => {
+  if (!movieId.value) return
 
-const posterFailed = ref(false)
+  loading.value = true
+  error.value = ''
+  posterFailed.value = false
 
-const openSeats = (sessionId: string) => {
+  try {
+    const payload = await fetchMovieDetail(movieId.value)
+    movie.value = payload.movie
+    sessions.value = payload.sessions
+  } catch (err) {
+    movie.value = null
+    sessions.value = []
+    error.value = getApiErrorMessage(err, t('auth.requestFailed'))
+  } finally {
+    loading.value = false
+  }
+})
+
+const openSeats = (sessionId: number) => {
   router.push(`/sessions/${sessionId}/seats`)
 }
 </script>
 
 <template>
-  <div v-if="!movie" class="stage flex min-h-screen items-center justify-center">
+  <div v-if="loading" class="stage flex min-h-screen items-center justify-center text-dim">
+    {{ t('movie.loading') }}
+  </div>
+
+  <div v-else-if="!movie" class="stage flex min-h-screen items-center justify-center">
     <div class="text-center text-dim">
-      {{ t('movie.notFound') }}
+      {{ error || t('movie.notFound') }}
       <button class="btn-amber mt-6" @click="router.push('/movies')">{{ t('movie.toAfisha') }}</button>
     </div>
   </div>
@@ -80,11 +97,11 @@ const openSeats = (sessionId: string) => {
         <div class="md:col-span-2">
           <div class="flex flex-wrap gap-2 mb-4">
             <span
-              v-for="g in movie.genre"
-              :key="g"
+              v-for="genre in movie.genre"
+              :key="genre"
               class="inline-flex items-center rounded-full border border-brand/30 bg-brand/15 px-2.5 py-1 text-[0.72rem] font-semibold tracking-[0.05em] text-brand"
             >
-              {{ g }}
+              {{ genre }}
             </span>
           </div>
           <h1 class="display mb-4 text-[clamp(2rem,5vw,3.5rem)] leading-none text-copy">
@@ -118,17 +135,17 @@ const openSeats = (sessionId: string) => {
         <template v-else>
           <div class="flex gap-2 mb-5 overflow-x-auto pb-2">
             <button
-              v-for="d in dates"
-              :key="d"
+              v-for="date in dates"
+              :key="date"
               class="shrink-0 rounded-xl border px-4 py-2.5 text-[0.82rem] font-semibold transition"
               :class="
-                selectedDate === d
+                selectedDate === date
                   ? 'border-brand/45 bg-brand/15 text-brand'
                   : 'border-line bg-surface-soft text-muted hover:border-line-strong hover:text-copy'
               "
-              @click="selectedDate = d"
+              @click="selectedDate = date"
             >
-              {{ formatDateLabel(d) }}
+              {{ formatDateLabel(date) }}
             </button>
           </div>
 
@@ -146,7 +163,7 @@ const openSeats = (sessionId: string) => {
                 {{ item.hall.name }}
               </span>
               <span class="text-[0.85rem] font-bold text-brand">
-                {{ formatPrice(item.session.price) }}
+                {{ formatPrice(item.session.price, item.session.currency) }}
               </span>
             </button>
           </div>

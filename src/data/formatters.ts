@@ -1,5 +1,4 @@
-import { locale } from '@/stores/i18n'
-import { TODAY } from './mock-data'
+import { currentIntlLocale, locale, t } from '@/stores/i18n'
 
 // ── Форматирование длительности ──────────────────────────────────────────
 
@@ -14,38 +13,53 @@ export const formatDuration = (minutes: number): string => {
 
 // ── Форматирование цены ──────────────────────────────────────────────────
 
-export const formatPrice = (amount: number): string => {
-  const currency = locale.value === 'en' ? 'som' : 'сом'
-  return `${amount} ${currency}`
+export const formatPrice = (amount: number, currency = 'KGS'): string => {
+  const value = Number.isFinite(amount) ? amount : 0
+  const formatted = new Intl.NumberFormat(currentIntlLocale.value, {
+    maximumFractionDigits: value % 1 === 0 ? 0 : 2,
+    minimumFractionDigits: value % 1 === 0 ? 0 : 2,
+  }).format(value)
+
+  const currencyLabel = currency === 'KGS'
+    ? (locale.value === 'en' ? 'som' : 'сом')
+    : currency
+
+  return `${formatted} ${currencyLabel}`
 }
 
 // ── Форматирование даты ──────────────────────────────────────────────────
 
-const WEEKDAYS: Record<'ru' | 'en' | 'ky', string[]> = {
-  ru: ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'],
-  en: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
-  ky: ['жк', 'дш', 'шш', 'шр', 'бш', 'жм', 'иш'],
-}
-const MONTHS: Record<'ru' | 'en' | 'ky', string[]> = {
-  ru: ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'],
-  en: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-  ky: ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'],
-}
-const TODAY_LABEL: Record<'ru' | 'en' | 'ky', string> = {
-  ru: 'Сегодня',
-  en: 'Today',
-  ky: 'Бүгүн',
-}
-
 export const formatDateLabel = (isoDate: string): string => {
-  const l = locale.value
-  if (isoDate === TODAY) return TODAY_LABEL[l]
-  const d = new Date(isoDate + 'T00:00:00')
-  const wd = WEEKDAYS[l][d.getDay()]
-  const mo = MONTHS[l][d.getMonth()]
-  const day = d.getDate()
-  if (l === 'en') return `${wd}, ${mo} ${day}`
-  return `${wd}, ${day} ${mo}`
+  const normalizedDate = isoDate.slice(0, 10)
+  const today = new Date()
+  const todayIso = [
+    today.getFullYear(),
+    String(today.getMonth() + 1).padStart(2, '0'),
+    String(today.getDate()).padStart(2, '0'),
+  ].join('-')
+  if (normalizedDate === todayIso) return t('date.today')
+
+  const d = new Date(`${normalizedDate}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return normalizedDate
+
+  const options = locale.value === 'en'
+    ? { weekday: 'short', month: 'short', day: 'numeric' } as const
+    : { weekday: 'short', day: 'numeric', month: 'short' } as const
+
+  return new Intl.DateTimeFormat(currentIntlLocale.value, options).format(d)
 }
 
 export const formatTime = (iso: string): string => iso.slice(11, 16)
+
+export const formatSeatLabel = (row: number, number: number) => `${row}-${number}`
+
+export const formatLongDate = (value: string): string => {
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+
+  return new Intl.DateTimeFormat(currentIntlLocale.value, {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(parsed)
+}

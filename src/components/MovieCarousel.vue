@@ -3,9 +3,11 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import AppIcon from '@/components/AppIcon.vue'
+import { formatDuration } from '@/data/cinema'
+import { t } from '@/stores/i18n'
 
 interface CarouselMovie {
-  id: string
+  id: number
   title: string
   genre: string[]
   duration: number
@@ -78,14 +80,12 @@ const onMouseUp = (e: MouseEvent) => {
   startAutoplay()
 }
 
-const formatDuration = (min: number) => `${Math.floor(min / 60)}ч ${min % 60}мин`
-
-const goToMovie = (id: string) => router.push(`/movies/${id}`)
+const goToMovie = (id: number) => router.push(`/movies/${id}`)
 
 // Возвращаем CarouselMovie (не undefined) — компонент рендерится только если movies.length > 0
 const currentMovie = computed((): CarouselMovie => {
   return props.movies[currentIndex.value] ?? props.movies[0] ?? {
-    id: '', title: '', genre: [], duration: 0, ageRating: ''
+    id: 0, title: '', genre: [], duration: 0, ageRating: ''
   }
 })
 </script>
@@ -184,7 +184,7 @@ const currentMovie = computed((): CarouselMovie => {
                   @click="goToMovie(currentMovie.id)"
                 >
                   <AppIcon name="ticket" :size="16" />
-                  Купить билет
+                  {{ t('carousel.buyTicket') }}
                 </button>
               </div>
             </div>
@@ -196,14 +196,14 @@ const currentMovie = computed((): CarouselMovie => {
     <!-- Навигация -->
     <button
       class="absolute left-4 top-1/2 z-10 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-white/15 bg-black/50 text-white backdrop-blur-sm transition hover:scale-110 hover:border-brand hover:bg-brand/80 max-[480px]:hidden"
-      aria-label="Предыдущий"
+      :aria-label="t('carousel.prev')"
       @click="prev"
     >
       <AppIcon name="chevron-left" :size="20" />
     </button>
     <button
       class="absolute right-4 top-1/2 z-10 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-white/15 bg-black/50 text-white backdrop-blur-sm transition hover:scale-110 hover:border-brand hover:bg-brand/80 max-[480px]:hidden"
-      aria-label="Следующий"
+      :aria-label="t('carousel.next')"
       @click="next"
     >
       <AppIcon name="chevron-right" :size="20" />
@@ -216,7 +216,7 @@ const currentMovie = computed((): CarouselMovie => {
         :key="i"
         class="h-1.5 w-1.5 rounded-full bg-white/30 transition-all"
         :class="{ 'w-5 bg-brand': i === currentIndex }"
-        :aria-label="`Слайд ${i + 1}`"
+        :aria-label="t('carousel.slide', { n: i + 1 })"
         @click="goTo(i)"
       />
     </div>

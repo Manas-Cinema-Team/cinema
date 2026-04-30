@@ -36,6 +36,7 @@ const posterFailed = ref(false)
         :src="movie.posterUrl"
         :alt="movie.title"
         loading="lazy"
+        class="block h-full w-full object-cover"
         @error="posterFailed = true"
       />
       <span class="absolute right-2 top-2 rounded border border-line bg-black/35 px-2 py-0.5 text-[0.7rem] font-semibold text-copy backdrop-blur-sm">
@@ -49,7 +50,7 @@ const posterFailed = ref(false)
         <AppIcon name="clock" :size="12" />
         <span>{{ formatDuration(movie.duration) }}</span>
         <span class="text-line-strong">·</span>
-        <span>{{ movie.genre[0] }}</span>
+        <span>{{ movie.genre[0] || '—' }}</span>
       </div>
     </div>
   </article>

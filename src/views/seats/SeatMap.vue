@@ -1,52 +1,61 @@
 <script setup lang="ts">
-// ── Рендерит схему зала (только отображение) ─────────────────────────────
-// Вся логика статусов живёт в useSeatSelection и передаётся сюда.
-
-import type { Hall } from '@/data/types'
+import { formatSeatLabel, type HallSchema } from '@/data/cinema'
 import type { DisplayStatus } from './useSeatSelection'
 import { t } from '@/stores/i18n'
 
-defineProps<{
-  hall: Hall
-  seatStatus: (row: string, col: number) => DisplayStatus
+const props = defineProps<{
+  schema?: HallSchema | null
+  seatStatus: (row: number, number: number) => DisplayStatus
 }>()
 
 const emit = defineEmits<{
-  (e: 'toggle', row: string, col: number): void
+  (e: 'toggle', row: number, col: number): void
 }>()
+
+const isLockedStatus = (status: DisplayStatus) =>
+  ['held', 'held-self', 'booked', 'disabled'].includes(status)
 </script>
 
 <template>
-  <div class="seat-map">
-    <div v-for="row in hall.schema.rows" :key="row" class="seat-row">
-      <span class="seat-rowlabel">{{ row }}</span>
+  <div v-if="props.schema" class="seat-map">
+    <div v-for="row in props.schema.rows" :key="row.row" class="seat-row">
+      <span class="seat-rowlabel">{{ row.row }}</span>
       <div class="seat-cells">
-        <template v-for="col in hall.schema.seatsPerRow" :key="`${row}-${col}`">
-          <span
-            v-if="col === Math.ceil(hall.schema.seatsPerRow / 2) + 1"
-            class="seat-aisle"
-          />
+        <template v-for="(seat, seatIndex) in row.seats" :key="`${row.row}-${seat.number}`">
           <button
             type="button"
             class="seat"
-            :class="`seat--${seatStatus(row, col)}`"
-            :disabled="['held', 'booked', 'disabled'].includes(seatStatus(row, col))"
-            :aria-label="t('seats.seatLabel', { seat: `${row}${col}` })"
-            @click="emit('toggle', row, col)"
+            :class="[
+              `seat--${seatStatus(row.row, seat.number)}`,
+              seat.type === 'vip' ? 'seat--vip' : '',
+            ]"
+            :disabled="isLockedStatus(seatStatus(row.row, seat.number))"
+            :aria-label="t('seats.seatLabel', { seat: formatSeatLabel(row.row, seat.number) })"
+            @click="emit('toggle', row.row, seat.number)"
           >
-            {{ col }}
+            {{ seat.number }}
           </button>
+          <span
+            v-if="seatIndex + 1 === Math.ceil(row.seats.length / 2)"
+            class="seat-aisle"
+          />
         </template>
       </div>
-      <span class="seat-rowlabel">{{ row }}</span>
+      <span class="seat-rowlabel">{{ row.row }}</span>
     </div>
   </div>
+  <div v-else class="seat-map seat-map--empty">
+    {{ t('seats.schemaUnavailable') }}
+  </div>
 
-  <!-- Легенда -->
   <div class="legend">
     <div class="legend-item">
       <span class="seat seat-demo seat--available" />
       <span>{{ t('seats.legendAvailable') }}</span>
+    </div>
+    <div class="legend-item">
+      <span class="seat seat-demo seat--available seat--vip" />
+      <span>{{ t('seats.legendVip') }}</span>
     </div>
     <div class="legend-item">
       <span class="seat seat-demo seat--selected" />
@@ -55,6 +64,10 @@ const emit = defineEmits<{
     <div class="legend-item">
       <span class="seat seat-demo seat--held" />
       <span>{{ t('seats.legendHeld') }}</span>
+    </div>
+    <div class="legend-item">
+      <span class="seat seat-demo seat--held-self" />
+      <span>{{ t('seats.legendHeldSelf') }}</span>
     </div>
     <div class="legend-item">
       <span class="seat seat-demo seat--booked" />
@@ -73,6 +86,12 @@ const emit = defineEmits<{
   background: var(--surface-soft);
   border: 1px solid var(--line);
   overflow-x: auto;
+}
+.seat-map--empty {
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  min-height: 220px;
 }
 .seat-row {
   display: flex;
@@ -108,6 +127,18 @@ const emit = defineEmits<{
 .seat--available { background: var(--bg-elev); border-color: var(--line-strong); }
 .seat--available:hover { border-color: var(--green); }
 
+.seat--vip::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--amber);
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.45);
+}
+
 .seat--selected {
   background: var(--amber); border-color: var(--amber-dark);
   color: #18181b;
@@ -119,6 +150,12 @@ const emit = defineEmits<{
   background: rgba(245,158,11,.18);
   border-color: rgba(245,158,11,.45);
   opacity: 0.75;
+}
+
+.seat--held-self {
+  background: rgba(59,130,246,.18);
+  border-color: rgba(59,130,246,.5);
+  color: #bfdbfe;
 }
 
 .seat--booked {

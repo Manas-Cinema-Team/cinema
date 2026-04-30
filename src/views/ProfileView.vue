@@ -3,7 +3,8 @@ import { computed, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 
 import AppIcon from '@/components/AppIcon.vue'
-import { currentUser, isAuthenticated, logout } from '@/stores/auth'
+import { formatLongDate, formatPrice } from '@/data/cinema'
+import { currentSessionStartedAt, currentUser, isAuthenticated, logout } from '@/stores/auth'
 import { allTickets, removeTicket, ticketCount } from '@/stores/bookings'
 import { t } from '@/stores/i18n'
 
@@ -18,33 +19,20 @@ const userInitials = computed(() => {
 })
 
 const memberSince = computed(() => {
-  const token = currentUser.value?.token
-  if (!token) return '—'
-  const parts = token.split('.')
-  const ts = Number(parts[2])
-  if (!ts) return '—'
-  return new Date(ts).toLocaleDateString('ru-RU', {
-    day: 'numeric', month: 'long', year: 'numeric',
-  })
+  const date = currentUser.value?.createdAt || currentSessionStartedAt.value
+  if (!date) return '—'
+  return formatLongDate(date)
 })
 
-const onLogout = () => {
-  logout()
+const onLogout = async () => {
+  await logout()
   router.push('/')
 }
 
 const activeTab = ref<'info' | 'tickets'>('info')
 
-const formatDate = (dateStr: string) => {
-  try {
-    return new Date(dateStr).toLocaleDateString('ru-RU', {
-      day: 'numeric', month: 'long', year: 'numeric',
-    })
-  } catch { return dateStr }
-}
-
 const confirmRemove = (id: string) => {
-  if (confirm('Удалить этот билет из истории?')) removeTicket(id)
+  if (confirm(t('profile.confirmRemove'))) removeTicket(id)
 }
 
 const uniqueMovies = computed(() => new Set(allTickets.value.map(tk => tk.movieId)).size)
@@ -62,7 +50,7 @@ const tabClass = (active: boolean) =>
 
       <button class="mb-6 inline-flex items-center gap-2 bg-transparent text-[0.85rem] text-dim transition hover:text-copy" @click="router.back()">
         <AppIcon name="arrow-left" :size="15" />
-        Назад
+        {{ t('common.back') }}
       </button>
 
       <!-- Карточка профиля -->
@@ -76,13 +64,13 @@ const tabClass = (active: boolean) =>
           <div>
             <h1 class="mb-1 text-[1.05rem] font-bold text-copy">{{ currentUser?.email }}</h1>
             <span class="inline-flex items-center gap-1.5 text-[0.78rem] font-medium text-success">
-              <span class="h-[7px] w-[7px] rounded-full bg-success" /> Авторизован
+              <span class="h-[7px] w-[7px] rounded-full bg-success" /> {{ t('profile.statusAuthorized') }}
             </span>
           </div>
         </div>
         <button class="relative inline-flex items-center gap-2 self-start rounded-xl border border-danger/30 bg-danger/10 px-4 py-2 text-[0.85rem] font-medium text-danger transition hover:bg-danger/20 sm:self-auto" @click="onLogout">
           <AppIcon name="log-out" :size="16" />
-          Выйти
+          {{ t('auth.logout') }}
         </button>
       </div>
 
@@ -91,21 +79,21 @@ const tabClass = (active: boolean) =>
         <div class="flex items-center gap-4 rounded-[0.9rem] border border-line bg-surface-soft px-5 py-4">
           <div class="grid h-[38px] w-[38px] shrink-0 place-items-center rounded-[0.6rem] bg-brand/15 text-brand"><AppIcon name="calendar" :size="18" /></div>
           <div>
-            <div class="mb-0.5 text-[0.72rem] text-dim">Дата регистрации</div>
+            <div class="mb-0.5 text-[0.72rem] text-dim">{{ t('profile.memberSince') }}</div>
             <div class="text-[0.95rem] font-bold text-copy">{{ memberSince }}</div>
           </div>
         </div>
         <div class="flex items-center gap-4 rounded-[0.9rem] border border-line bg-surface-soft px-5 py-4">
           <div class="grid h-[38px] w-[38px] shrink-0 place-items-center rounded-[0.6rem] bg-brand/15 text-brand"><AppIcon name="ticket" :size="18" /></div>
           <div>
-            <div class="mb-0.5 text-[0.72rem] text-dim">Билетов куплено</div>
+            <div class="mb-0.5 text-[0.72rem] text-dim">{{ t('profile.ticketsBought') }}</div>
             <div class="text-[0.95rem] font-bold text-copy">{{ ticketCount }}</div>
           </div>
         </div>
         <div class="flex items-center gap-4 rounded-[0.9rem] border border-line bg-surface-soft px-5 py-4">
           <div class="grid h-[38px] w-[38px] shrink-0 place-items-center rounded-[0.6rem] bg-brand/15 text-brand"><AppIcon name="film" :size="18" /></div>
           <div>
-            <div class="mb-0.5 text-[0.72rem] text-dim">Фильмов просмотрено</div>
+            <div class="mb-0.5 text-[0.72rem] text-dim">{{ t('profile.moviesWatched') }}</div>
             <div class="text-[0.95rem] font-bold text-copy">{{ uniqueMovies }}</div>
           </div>
         </div>
@@ -119,7 +107,7 @@ const tabClass = (active: boolean) =>
           @click="activeTab = 'info'"
         >
           <AppIcon name="user" :size="15" />
-          Данные профиля
+          {{ t('profile.tabInfo') }}
         </button>
         <button
           class="mb-[-1px] inline-flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-[0.85rem] font-semibold transition"
@@ -127,7 +115,7 @@ const tabClass = (active: boolean) =>
           @click="activeTab = 'tickets'"
         >
           <AppIcon name="ticket" :size="15" />
-          Мои билеты
+          {{ t('profile.tabTickets') }}
           <span v-if="ticketCount > 0" class="rounded-full bg-brand px-2 py-0.5 text-[0.68rem] font-bold text-zinc-900">{{ ticketCount }}</span>
         </button>
       </div>
@@ -138,23 +126,23 @@ const tabClass = (active: boolean) =>
         <div v-if="activeTab === 'info'" key="info" class="py-6">
           <div class="mb-4 overflow-hidden rounded-[0.9rem] border border-line">
             <div class="grid gap-4 border-b border-line px-5 py-3.5 sm:grid-cols-[160px_minmax(0,1fr)]">
-              <div class="text-[0.8rem] font-medium text-dim">Email</div>
+              <div class="text-[0.8rem] font-medium text-dim">{{ t('auth.email') }}</div>
               <div class="break-all text-[0.88rem] text-copy">{{ currentUser?.email }}</div>
             </div>
             <div class="grid gap-4 border-b border-line px-5 py-3.5 sm:grid-cols-[160px_minmax(0,1fr)]">
-              <div class="text-[0.8rem] font-medium text-dim">Роль</div>
-              <div class="break-all text-[0.88rem] text-copy">Пользователь</div>
+              <div class="text-[0.8rem] font-medium text-dim">{{ t('profile.role') }}</div>
+              <div class="break-all text-[0.88rem] text-copy">{{ t('profile.user') }}</div>
             </div>
             <div class="grid gap-4 px-5 py-3.5 sm:grid-cols-[160px_minmax(0,1fr)]">
-              <div class="text-[0.8rem] font-medium text-dim">Токен сессии</div>
-              <div class="break-all font-mono text-[0.78rem] text-muted">
-                {{ currentUser?.token?.slice(0, 28) }}…
+              <div class="text-[0.8rem] font-medium text-dim">{{ t('profile.sessionState') }}</div>
+              <div class="break-all text-[0.88rem] text-copy">
+                {{ t('profile.sessionActive') }}
               </div>
             </div>
           </div>
           <div class="flex items-start gap-2 rounded-xl border border-brand/20 bg-brand/10 px-4 py-3 text-[0.8rem] text-dim">
             <AppIcon name="info" :size="15" />
-            Редактирование профиля будет доступно после подключения backend API.
+            {{ t('profile.localHistoryNote') }}
           </div>
         </div>
 
@@ -187,7 +175,7 @@ const tabClass = (active: boolean) =>
                 <div class="mb-1 text-[0.68rem] font-bold tracking-[0.12em] text-brand">{{ ticket.bookingCode }}</div>
                 <div class="mb-1.5 text-[0.95rem] font-bold text-copy">{{ ticket.movieTitle }}</div>
                 <div class="mb-2 flex flex-wrap gap-3 text-[0.72rem] text-dim">
-                  <span class="inline-flex items-center gap-1"><AppIcon name="calendar" :size="12" /> {{ formatDate(ticket.date) }}</span>
+                  <span class="inline-flex items-center gap-1"><AppIcon name="calendar" :size="12" /> {{ formatLongDate(ticket.date) }}</span>
                   <span class="inline-flex items-center gap-1"><AppIcon name="clock" :size="12" /> {{ ticket.time }}</span>
                   <span class="inline-flex items-center gap-1"><AppIcon name="map-pin" :size="12" /> {{ ticket.hallName }}</span>
                 </div>
@@ -204,13 +192,13 @@ const tabClass = (active: boolean) =>
 
               <!-- Цена + действия -->
               <div class="flex flex-wrap items-center gap-2 md:flex-col md:items-end">
-                <div class="whitespace-nowrap text-[0.95rem] font-bold text-brand">{{ ticket.total.toLocaleString('ru-RU') }} сом</div>
+                <div class="whitespace-nowrap text-[0.95rem] font-bold text-brand">{{ formatPrice(ticket.total, ticket.currency) }}</div>
                 <RouterLink
-                  :to="{ name: 'booking-success', query: { session: ticket.sessionId, seats: ticket.seats.join(','), total: String(ticket.total) } }"
+                  :to="{ name: 'booking-success', query: { booking: String(ticket.bookingId) } }"
                   class="inline-flex items-center gap-1 rounded-md border border-line bg-surface-soft px-2.5 py-1.5 text-[0.75rem] text-muted transition hover:border-brand hover:text-brand"
                 >
                   <AppIcon name="eye" :size="13" />
-                  Просмотр
+                  {{ t('common.view') }}
                 </RouterLink>
                 <button class="rounded-md border border-danger/20 bg-transparent px-2 py-1.5 text-danger/60 transition hover:border-danger/50 hover:bg-danger/10 hover:text-danger" @click="confirmRemove(ticket.id)">
                   <AppIcon name="trash-2" :size="13" />
@@ -224,11 +212,11 @@ const tabClass = (active: boolean) =>
             <div class="mb-5 grid h-[72px] w-[72px] place-items-center rounded-full border border-line bg-surface-soft text-dim">
               <AppIcon name="ticket" :size="36" />
             </div>
-            <div class="mb-1.5 text-[1.1rem] font-bold text-copy">Билетов пока нет</div>
-            <div class="max-w-[280px] text-[0.85rem] text-dim">Выберите фильм и забронируйте место прямо сейчас</div>
+            <div class="mb-1.5 text-[1.1rem] font-bold text-copy">{{ t('profile.noTicketsTitle') }}</div>
+            <div class="max-w-[280px] text-[0.85rem] text-dim">{{ t('profile.noTicketsText') }}</div>
             <RouterLink to="/movies" class="btn-amber mt-4">
               <AppIcon name="film" :size="16" />
-              Смотреть афишу
+              {{ t('profile.browseMovies') }}
             </RouterLink>
           </div>
 
